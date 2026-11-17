@@ -1076,7 +1076,7 @@ async function apiPost(body) {
     const res = await fetch(API_URL, {
       method: "POST",
       redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(out),
       signal: controller.signal
     });
