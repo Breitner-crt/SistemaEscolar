@@ -834,6 +834,7 @@ const CRUD_CFG = {
 
 const NAV = [
   { view: "dashboard", label: "Panel", roles: ["admin", "docente", "padre"], icon: "grid" },
+  { view: "stats", label: "Estadísticas", roles: ["admin", "docente"], icon: "pie-chart" },
   { view: "students", label: "Estudiantes", roles: ["admin", "docente", "padre"], icon: "users" },
   { sec: "Académico", roles: ["admin", "docente", "padre"] },
   { view: "activities", label: "Actividades", roles: ["admin", "docente"], icon: "book" },
@@ -856,6 +857,7 @@ const NAV = [
 
 const MENU_META = {
   students:     { ico: "👥", d: "Padrón de estudiantes matriculados y sus datos", c: "#2563eb", bg: "rgba(37,99,235,0.1)", bd: "rgba(37,99,235,0.25)" },
+  stats:        { ico: "📈", d: "Resumen estadístico y cifras generales del plantel", c: "#0891b2", bg: "rgba(8,145,178,0.1)", bd: "rgba(8,145,178,0.25)" },
   activities:   { ico: "📝", d: "Tareas, prácticas y evaluaciones continuas", c: "#059669", bg: "rgba(5,150,105,0.1)", bd: "rgba(5,150,105,0.25)" },
   grades:       { ico: "🎯", d: "Registro masivo de notas por actividad", c: "#d97706", bg: "rgba(217,119,6,0.1)", bd: "rgba(217,119,6,0.25)" },
   exams:        { ico: "📊", d: "Notas de exámenes bimestrales por materia", c: "#dc2626", bg: "rgba(220,38,38,0.1)", bd: "rgba(220,38,38,0.1)" },
@@ -1692,14 +1694,61 @@ function renderDashboard(c) {
   `;
 
   c.querySelectorAll("[data-goto]").forEach(b => {
-    b.addEventListener("click", () => go(b.dataset.goto));
+    b.addEventListener("click", () => {
+      if (b.dataset.goto === "stats") {
+        renderStatsModal();
+      } else {
+        go(b.dataset.goto);
+      }
+    });
   });
 
   const btnLink = $("#btnLinkChild");
   if (btnLink) btnLink.addEventListener("click", linkChildFlow);
 }
 
-function exportTableToExcel(tableId, fileName) {
+function renderStatsModal() {
+  const t = today();
+  let cards = [];
+  const role = USER.rol;
+
+  if (role === "admin") {
+    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t);
+    cards = [
+      [(DB.students || []).length, "Estudiantes Registrados", "👥"],
+      [(DB.grados || []).length, "Grados Activos", "📚"],
+      [(DB.secciones || []).length, "Secciones", "🏫"],
+      [(DB.materias || []).length, "Materias", "📖"],
+      [(DB.activities || []).length, "Actividades Creadas", "📝"],
+      [(DB.users || []).length, "Cuentas de Usuario", "👤"],
+      [(DB.grades || []).length, "Notas Asignadas", "🎯"],
+      [todayAtt.length, "Asistencias Hoy", "📅"]
+    ];
+  } else if (role === "docente") {
+    const myActs = scopeActivities() || [];
+    const kidIds = (scopeStudents() || []).map(s => String(s.id));
+    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
+    cards = [
+      [kidIds.length, "Mis Estudiantes", "👥"],
+      [scopeMaterias().length, "Mis Materias", "📖"],
+      [myActs.length, "Mis Actividades", "📝"],
+      [todayAtt.length, "Asistencias Registradas Hoy", "📅"]
+    ];
+  }
+
+  const gridHtml = '<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:12px; padding:10px 0;">' +
+    cards.map(x => `
+      <div style="background:var(--surface-card); border:1.5px solid var(--surface-border); border-radius:var(--radius-md); padding:14px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:4px;">${x[2]}</div>
+        <div style="font-size:20px; font-weight:800; color:var(--primary);">${x[0]}</div>
+        <div style="font-size:11.5px; color:var(--text-muted); font-weight:600; margin-top:2px;">${esc(x[1])}</div>
+      </div>
+    `).join("") + '</div>';
+
+  openModal("📊 Estadísticas del Sistema", gridHtml, '<button class="btn primary" id="btnCloseStats">Cerrar</button>', ov => {
+    ov.querySelector("#btnCloseStats").addEventListener("click", () => ov.remove());
+  });
+}
   const table = document.getElementById(tableId);
   if (!table) { toast("No hay tabla para exportar", "err"); return; }
   if (typeof XLSX === "undefined") { toast("Librería Excel cargando... intenta nuevamente", "err"); return; }
