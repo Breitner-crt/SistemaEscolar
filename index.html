@@ -3054,8 +3054,13 @@ function renderMatrixGrades(c) {
                 return `
                   <tr>
                     <td style="padding:14px 18px;">
-                      <div style="font-weight:700; font-size:14px; color:var(--text);">${sName}</div>
-                      ${sSec ? `<div style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">Sección ${sSec}</div>` : ''}
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                        <div>
+                          <div style="font-weight:700; font-size:14px; color:var(--text);">${sName}</div>
+                          ${sSec ? `<div style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">Sección ${sSec}</div>` : ''}
+                        </div>
+                        <button class="btn ghost sm" type="button" onclick="printStudentGrades('${esc(s.id)}')" title="Imprimir reporte de este alumno" style="padding:4px 8px; font-size:11px;">🖨️ Imprimir</button>
+                      </div>
                     </td>
                     ${cells}
                     <td style="text-align:center; font-weight:800; font-size:16px; color:var(--primary); background:rgba(37,99,235,0.05);" id="total_${esc(s.id)}">
@@ -3185,6 +3190,52 @@ function printMatrix(all = false) {
 
   if (!fullHtml) { toast("No hay datos para imprimir", "warn"); return; }
   printDoc("Calificaciones " + gradLbl, fullHtml);
+}
+
+function printStudentGrades(studentId) {
+  const mg = state.matrixGrades;
+  const s = (visibleStudents() || []).find(x => String(x.id) === String(studentId));
+  if (!s) return;
+
+  const mat = (DB.materias || []).find(m => String(m.id) === String(mg.materia));
+  const acts = (DB.activities || []).filter(a => 
+      relMatch(a, "bimestre", mg.bimestre) && 
+      relMatch(a, "grado", mg.grado) && 
+      relMatch(a, "materia", mg.materia)
+  );
+
+  const bimLbl = relLabel("bimestre", mg.bimestre) || "—";
+  const gradLbl = relLabel("grado", mg.grado) || "—";
+  const schoolName = "Sistema Escolar";
+  const printDate = new Date().toLocaleDateString();
+
+  const gradesIdx = {};
+  (DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+
+  let total = 0;
+  const rows = acts.map(a => {
+      const g = gradesIdx[String(s.id) + "_" + String(a.id)];
+      const val = g ? numOrNull(g.nota !== undefined ? g.nota : (g.score !== undefined ? g.score : g.puntaje)) : null;
+      if (val !== null) total += val;
+      return `<tr><td>${esc(labelOf(a))}</td><td style="text-align:center">${val === null ? "—" : fmtNum(val)}</td><td style="text-align:center">${actPoints(a)}</td></tr>`;
+  }).join("");
+
+  const html = '<div class="boleta">' +
+      '<div class="rep-head">' +
+        '<div><h1>' + esc(schoolName) + '</h1><h2>Reporte de Calificaciones Individual</h2></div>' +
+        '<div class="meta"><b>Fecha:</b> ' + esc(printDate) + '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:20px; font-size:13px;">' +
+        '<b>Alumno:</b> ' + esc(labelOf(s)) + '<br>' +
+        '<b>Grado:</b> ' + esc(gradLbl) + ' · <b>Materia:</b> ' + esc(labelOf(mat) || mg.materia) + '<br>' +
+        '<b>Bimestre:</b> ' + esc(bimLbl) +
+      '</div>' +
+      '<table><thead><tr><th>Actividad</th><th style="text-align:center">Nota</th><th style="text-align:center">Máximo</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td style="text-align:right"><b>TOTAL ZONA</b></td><td style="text-align:center"><b>' + fmtNum(total) + '</b></td><td></td></tr></tfoot>' +
+      '</table></div>';
+
+  printDoc("Reporte " + labelOf(s), html);
 }
 
 async function saveMatrixGrades(activities) {
