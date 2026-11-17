@@ -1670,7 +1670,7 @@ function renderDashboard(c) {
         <span class="mc-d">${esc(m.d)}</span>
         <span class="mc-foot">
           ${n !== null ? `<span class="mc-badge">${n} ${esc(countTitle(item.view))}</span>` : ""}
-          <span class="mc-go">Abrir →</span>
+          ${item.view === "stats" ? "" : '<span class="mc-go">Abrir →</span>'}
         </span>
       </button>
     `;
