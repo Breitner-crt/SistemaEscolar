@@ -2984,7 +2984,11 @@ function renderMatrixGrades(c) {
         </button>
         <button class="btn ghost sm" id="btnPrintMatrix" type="button" style="padding:8px 16px; font-weight:600;">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-          PDF / Imprimir
+          Imprimir Materia
+        </button>
+        <button class="btn ghost sm" id="btnPrintAllMatrix" type="button" style="padding:8px 16px; font-weight:600;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          Todas las Materias
         </button>
       </div>
     </div>
@@ -3110,9 +3114,77 @@ function renderMatrixGrades(c) {
     exportTableToExcel("matrixGradesTable", "Registro_Notas_Zona");
   });
 
-  $("#btnPrintMatrix").addEventListener("click", () => {
-    window.print();
+  $("#btnPrintMatrix").addEventListener("click", () => printMatrix(false));
+  const btnPrintAll = $("#btnPrintAllMatrix");
+  if (btnPrintAll) btnPrintAll.addEventListener("click", () => printMatrix(true));
+}
+
+function printMatrix(all = false) {
+  const mg = state.matrixGrades;
+  const materias = all ? scopeMaterias() : (DB.materias || []).filter(m => String(m.id) === String(mg.materia));
+  
+  if (!materias.length) { toast("No hay materias seleccionadas", "err"); return; }
+  
+  const bimLbl = relLabel("bimestre", mg.bimestre) || "—";
+  const gradLbl = relLabel("grado", mg.grado) || "—";
+  const secLbl = relLabel("seccion", mg.seccion) || "Todas";
+  const schoolName = "Sistema Escolar";
+  const teacherName = USER.nombre || USER.usuario || "Docente";
+  const printDate = new Date().toLocaleDateString();
+
+  let fullHtml = "";
+  const allActs = DB.activities || [];
+  const gradesIdx = {};
+  (DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+  const students = filterGS(visibleStudents(), mg.grado, mg.seccion)
+    .sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b)), "es"));
+
+  materias.forEach(mat => {
+    const matId = String(mat.id);
+    const matLbl = labelOf(mat);
+    
+    const acts = allActs.filter(a => 
+      relMatch(a, "bimestre", mg.bimestre) && 
+      relMatch(a, "grado", mg.grado) && 
+      relMatch(a, "materia", matId)
+    );
+    
+    if (!acts.length && all) return;
+    if (!students.length) return;
+
+    fullHtml += '<div class="boleta" style="page-break-after:always; margin-bottom:40px;">' +
+      '<div class="rep-head">' +
+        '<div><h1>' + esc(schoolName) + '</h1><h2>Cuadro de Calificaciones</h2></div>' +
+        '<div class="meta">' +
+          '<b>Docente:</b> ' + esc(teacherName) + '<br>' +
+          '<b>Fecha:</b> ' + esc(printDate) +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px; font-size:12px;">' +
+        '<div><b>Materia:</b> ' + esc(matLbl) + '</div>' +
+        '<div><b>Grado:</b> ' + esc(gradLbl) + (secLbl !== "Todas" ? ' · Sección ' + esc(secLbl) : '') + '</div>' +
+        '<div><b>Bimestre:</b> ' + esc(bimLbl) + '</div>' +
+      '</div>' +
+      '<table><thead><tr>' +
+        '<th style="width:200px">Alumno</th>' +
+        acts.map(a => `<th style="text-align:center; font-size:9px">${esc(labelOf(a))}<br><small>[${actPoints(a)}pts]</small></th>`).join("") +
+        '<th style="text-align:center; width:80px">Total</th>' +
+      '</tr></thead><tbody>' +
+      students.map(s => {
+        let total = 0;
+        const rowCells = acts.map(a => {
+          const g = gradesIdx[String(s.id) + "_" + String(a.id)];
+          const val = g ? numOrNull(g.nota !== undefined ? g.nota : (g.score !== undefined ? g.score : g.puntaje)) : null;
+          if (val !== null) total += val;
+          return `<td style="text-align:center">${val === null ? "—" : fmtNum(val)}</td>`;
+        }).join("");
+        return `<tr><td style="font-size:11px">${esc(labelOf(s))}</td>${rowCells}<td style="text-align:center; font-weight:700;">${fmtNum(total)}</td></tr>`;
+      }).join("") +
+      '</tbody></table></div>';
   });
+
+  if (!fullHtml) { toast("No hay datos para imprimir", "warn"); return; }
+  printDoc("Calificaciones " + gradLbl, fullHtml);
 }
 
 async function saveMatrixGrades(activities) {
