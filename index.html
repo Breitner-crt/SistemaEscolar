@@ -834,7 +834,6 @@ const CRUD_CFG = {
 
 const NAV = [
   { view: "dashboard", label: "Panel", roles: ["admin", "docente", "padre"], icon: "grid" },
-  { view: "stats", label: "Estadísticas", roles: ["admin", "docente"], icon: "pie-chart" },
   { view: "students", label: "Estudiantes", roles: ["admin", "docente", "padre"], icon: "users" },
   { sec: "Académico", roles: ["admin", "docente", "padre"] },
   { view: "activities", label: "Actividades", roles: ["admin", "docente"], icon: "book" },
@@ -852,7 +851,9 @@ const NAV = [
   { sec: "Administración", roles: ["admin"] },
   { view: "users", label: "Usuarios", roles: ["admin"], icon: "user-check" },
   { view: "padres", label: "Padres de Familia", roles: ["admin"], icon: "heart" },
-  { view: "assignments", label: "Asignaciones Docentes", roles: ["admin"], icon: "link" }
+  { view: "assignments", label: "Asignaciones Docentes", roles: ["admin"], icon: "link" },
+  { sec: "General", roles: ["admin", "docente"] },
+  { view: "stats", label: "Estadísticas", roles: ["admin", "docente"], icon: "pie-chart" }
 ];
 
 const MENU_META = {
