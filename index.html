@@ -1737,7 +1737,7 @@ function renderStatsModal() {
     ];
   } else if (role === "docente") {
     const myActs = scopeActivities() || [];
-    const kidIds = (scopeStudents() || []).map(s => String(s.id));
+    const kidIds = (visibleStudents() || []).map(s => String(s.id));
     const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
     cards = [
       [kidIds.length, "Mis Estudiantes", "👥"],
