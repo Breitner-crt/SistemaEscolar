@@ -1707,6 +1707,17 @@ function renderDashboard(c) {
   if (btnLink) btnLink.addEventListener("click", linkChildFlow);
 }
 
+function exportTableToExcel(tableId, fileName) {
+  const table = document.getElementById(tableId);
+  if (!table) { toast("No hay tabla para exportar", "err"); return; }
+  if (typeof XLSX === "undefined") { toast("Librería Excel cargando... intenta nuevamente", "err"); return; }
+  const clone = table.cloneNode(true);
+  clone.querySelectorAll("th.actions, td.actions").forEach(el => el.remove());
+  const wb = XLSX.utils.table_to_book(clone, { sheet: "Datos" });
+  XLSX.writeFile(wb, `${fileName}_${today()}.xlsx`);
+  toast("Archivo Excel descargado con éxito", "ok");
+}
+
 function renderStatsModal() {
   const t = today();
   let cards = [];
