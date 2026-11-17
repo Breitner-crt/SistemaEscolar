@@ -4408,7 +4408,10 @@ function bindGlobal() {
 }
 
 function init() {
-  API_URL = localStorage.getItem(LS_URL) || DEFAULT_API_URL;
+  // Forzar siempre el uso del Proxy de Vercel para mayor seguridad y profesionalismo
+  API_URL = DEFAULT_API_URL;
+  localStorage.setItem(LS_URL, API_URL); 
+  
   const s = localStorage.getItem(LS_SESSION);
   const tk = localStorage.getItem(LS_TOKEN);
   if (s) { try { USER = JSON.parse(s); } catch (e) { USER = null; } }
