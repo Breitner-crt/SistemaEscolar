@@ -1686,13 +1686,8 @@ function renderDashboard(c) {
       </div>
     </div>
     ${extra}
-    ${linkChildHtml}
-    <div class="menu-stats">${cards.map(x => `
-      <div class="mstat" title="${esc(x[1])}: ${x[0]}">
-        <span class="mi">${x[2]}</span>
-        <div class="mbody"><div class="mv">${x[0]}</div><div class="ml">${esc(x[1])}</div></div>
-      </div>
-    `).join("")}</div>
+    <!-- ${linkChildHtml} -->
+    <!-- Se eliminaron los íconos de resumen superior -->
     <div class="menu-grid">${menuItems.map(cardHtml).join("")}</div>
   `;
 
