@@ -3197,13 +3197,6 @@ function printStudentGrades(studentId) {
   const s = (visibleStudents() || []).find(x => String(x.id) === String(studentId));
   if (!s) return;
 
-  const mat = (DB.materias || []).find(m => String(m.id) === String(mg.materia));
-  const acts = (DB.activities || []).filter(a => 
-      relMatch(a, "bimestre", mg.bimestre) && 
-      relMatch(a, "grado", mg.grado) && 
-      relMatch(a, "materia", mg.materia)
-  );
-
   const bimLbl = relLabel("bimestre", mg.bimestre) || "—";
   const gradLbl = relLabel("grado", mg.grado) || "—";
   const schoolName = "Sistema Escolar";
@@ -3211,31 +3204,47 @@ function printStudentGrades(studentId) {
 
   const gradesIdx = {};
   (DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+  
+  const materias = scopeMaterias();
+  let html = "";
 
-  let total = 0;
-  const rows = acts.map(a => {
-      const g = gradesIdx[String(s.id) + "_" + String(a.id)];
-      const val = g ? numOrNull(g.nota !== undefined ? g.nota : (g.score !== undefined ? g.score : g.puntaje)) : null;
-      if (val !== null) total += val;
-      return `<tr><td>${esc(labelOf(a))}</td><td style="text-align:center">${val === null ? "—" : fmtNum(val)}</td><td style="text-align:center">${actPoints(a)}</td></tr>`;
-  }).join("");
+  materias.forEach(mat => {
+      const acts = (DB.activities || []).filter(a => 
+          relMatch(a, "bimestre", mg.bimestre) && 
+          relMatch(a, "grado", mg.grado) && 
+          relMatch(a, "materia", mat.id)
+      );
+      if (!acts.length) return;
 
-  const html = '<div class="boleta">' +
-      '<div class="rep-head">' +
-        '<div><h1>' + esc(schoolName) + '</h1><h2>Reporte de Calificaciones Individual</h2></div>' +
-        '<div class="meta"><b>Fecha:</b> ' + esc(printDate) + '</div>' +
-      '</div>' +
-      '<div style="margin-bottom:20px; font-size:13px;">' +
-        '<b>Alumno:</b> ' + esc(labelOf(s)) + '<br>' +
-        '<b>Grado:</b> ' + esc(gradLbl) + ' · <b>Materia:</b> ' + esc(labelOf(mat) || mg.materia) + '<br>' +
-        '<b>Bimestre:</b> ' + esc(bimLbl) +
-      '</div>' +
+      let total = 0;
+      const rows = acts.map(a => {
+          const g = gradesIdx[String(s.id) + "_" + String(a.id)];
+          const val = g ? numOrNull(g.nota !== undefined ? g.nota : (g.score !== undefined ? g.score : g.puntaje)) : null;
+          if (val !== null) total += val;
+          return `<tr><td>${esc(labelOf(a))}</td><td style="text-align:center">${val === null ? "—" : fmtNum(val)}</td><td style="text-align:center">${actPoints(a)}</td></tr>`;
+      }).join("");
+
+      html += '<div style="margin-bottom:30px;">' +
+      '<div style="font-size:14px; margin-bottom:5px; border-bottom:1px solid #ccc;"><b>Materia:</b> ' + esc(labelOf(mat)) + '</div>' +
       '<table><thead><tr><th>Actividad</th><th style="text-align:center">Nota</th><th style="text-align:center">Máximo</th></tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
       '<tfoot><tr><td style="text-align:right"><b>TOTAL ZONA</b></td><td style="text-align:center"><b>' + fmtNum(total) + '</b></td><td></td></tr></tfoot>' +
       '</table></div>';
+  });
 
-  printDoc("Reporte " + labelOf(s), html);
+  const fullHtml = '<div class="boleta">' +
+      '<div class="rep-head">' +
+        '<div><h1>' + esc(schoolName) + '</h1><h2>Reporte de Calificaciones (Todas las Materias)</h2></div>' +
+        '<div class="meta"><b>Fecha:</b> ' + esc(printDate) + '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:20px; font-size:13px;">' +
+        '<b>Alumno:</b> ' + esc(labelOf(s)) + '<br>' +
+        '<b>Grado:</b> ' + esc(gradLbl) + '<br>' +
+        '<b>Bimestre:</b> ' + esc(bimLbl) +
+      '</div>' +
+      html + '</div>';
+
+  printDoc("Reporte " + labelOf(s), fullHtml);
 }
 
 async function saveMatrixGrades(activities) {
