@@ -3512,7 +3512,7 @@ async function saveMatrixGrades(activities) {
 
     const gradesDb = DB.grades || [];
     const toCheck = payload.filter(p => p.nota !== "");
-    const notaKeys = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal"];
+    const notaKeys = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal", "points"];
     const missing = toCheck.filter(p =>
       !gradesDb.some(g => {
         if (String(g.studentId) !== String(p.studentId) || String(g.activityId) !== String(p.activityId)) return false;
@@ -3548,7 +3548,7 @@ function actPoints(a) {
 
 function gradeScore(rec) {
   if (!rec) return null;
-  const cands = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal"];
+  const cands = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal", "points"];
   for (const k of cands) {
     if (rec[k] !== undefined && rec[k] !== null && String(rec[k]).trim() !== "") {
       const n = numOrNull(rec[k]);
