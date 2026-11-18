@@ -649,30 +649,35 @@
       .acc-head .acc-meta { font-size: 11px; max-width: 130px; white-space: normal; text-align: right; line-height: 1.2; }
       .acc-head .acc-title { white-space: normal; overflow: visible; text-overflow: clip; }
       
-      /* Mejoras para Calificaciones en móvil */
-      .matrix-card-mobile { 
+      /* Mejoras para Asistencia en móvil */
+      .att-card-mobile { 
         border: 1px solid var(--surface-border); 
         border-radius: var(--radius-md); 
         padding: 16px; 
         margin-bottom: 12px; 
         background: var(--surface-card);
       }
-      .matrix-card-mobile h3 { font-size: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; }
-      .matrix-card-mobile .act-row { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        padding: 8px 0; 
-        border-bottom: 1px solid var(--surface-border-subtle);
+      .att-card-mobile h3 { font-size: 15px; margin-bottom: 12px; }
+      .att-mobile-chk-group { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 8px; 
+        margin-bottom: 10px;
       }
-      .matrix-card-mobile .act-row:last-child { border-bottom: none; }
-      .matrix-card-mobile .act-info { flex: 1; margin-right: 12px; }
-      .matrix-card-mobile .act-name { font-size: 12px; font-weight: 600; color: var(--text); }
-      .matrix-card-mobile .act-pts { font-size: 10px; color: var(--text-dim); }
-      .table-wrap:has(#matrixGradesTable) { display: none; }
-      .mobile-matrix-list { display: block !important; }
+      .att-mobile-chk-group label {
+        display: flex; 
+        align-items: center; 
+        padding: 8px; 
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .att-mobile-chk-group input { margin-right: 8px; }
+      .att-table-wrap:has(#batchTable) { display: none; }
+      .mobile-att-list { display: block !important; }
     }
-    .mobile-matrix-list { display: none; }
+    .mobile-att-list { display: none; }
   </style>
 </head>
 <body>
@@ -2557,10 +2562,33 @@ function attendanceTableHtml(st, editable) {
       '<div class="att-legend">' + legend + "</div>" +
       '<div class="att-summary" id="attSummary"></div>' +
     "</div>" +
-    '<div class="card"><div class="table-wrap"><table id="batchTable">' +
+    '<div class="card att-table-wrap"><div class="table-wrap"><table id="batchTable">' +
       "<thead><tr><th>Estudiante</th>" + head + "<th>Comentario</th></tr></thead>" +
       "<tbody>" + rows + "</tbody>" +
     "</table></div></div>" +
+    '<div class="mobile-att-list" style="display:none; padding:10px;">' +
+      students.map(stu => {
+        const ex = findExisting("attendance", st, stu.id);
+        const cur = ex ? attNorm(ex[sCol]) : "";
+        const comment = ex && ex.comment !== undefined && ex.comment !== null ? String(ex.comment) : "";
+        const cmtDis = (editable && cur === "justified") ? "" : " disabled";
+        const chkHtml = ATT_STATES.map(s => `
+          <label style="color:${s.color}">
+            <input type="checkbox" class="att-chk" data-stud="${esc(stu.id)}" data-state="${s.v}" ${cur === s.v ? "checked" : ""} ${dis}>
+            ${esc(s.label)}
+          </label>
+        `).join("");
+        return `
+          <div class="att-card-mobile" data-att-row="${esc(stu.id)}">
+            <h3>${esc(labelOf(stu))}</h3>
+            <div class="att-mobile-chk-group">
+              ${chkHtml}
+            </div>
+            <input class="in" data-att-comment="${esc(stu.id)}" value="${esc(comment)}" placeholder="Justificación (opcional)" ${cmtDis} style="width:100%;">
+          </div>
+        `;
+      }).join("") +
+    '</div>' +
     '<table id="attFlatExport" style="display:none"></table>'
   );
 }
@@ -2568,7 +2596,7 @@ function attendanceTableHtml(st, editable) {
 function bindAttendanceEvents(c) {
   c.querySelectorAll(".att-chk").forEach(chk => {
     chk.addEventListener("change", () => {
-      const row = chk.closest("tr");
+      const row = chk.closest("tr") || chk.closest("[data-att-row]");
       if (!row) return;
       if (chk.checked) {
         row.querySelectorAll(".att-chk").forEach(o => { if (o !== chk) o.checked = false; });
@@ -2597,6 +2625,11 @@ function updateAttSummary() {
   const counts = { present: 0, absent: 0, late: 0, justified: 0, none: 0 };
   $$("#batchTable tbody tr").forEach(row => {
     const chk = row.querySelector(".att-chk:checked");
+    if (chk) counts[chk.dataset.state] = (counts[chk.dataset.state] || 0) + 1;
+    else counts.none++;
+  });
+  $$(".att-card-mobile").forEach(card => {
+    const chk = card.querySelector(".att-chk:checked");
     if (chk) counts[chk.dataset.state] = (counts[chk.dataset.state] || 0) + 1;
     else counts.none++;
   });
