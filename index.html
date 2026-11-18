@@ -3451,51 +3451,89 @@ async function saveStudentGrades(studentId) {
 }
 
 async function saveMatrixGrades(activities) {
+  const inputs = $$(".matrix-grade-input");
+  if (!inputs.length) {
+    toast("No hay calificaciones para guardar", "err");
+    return;
+  }
 
-const ALL_BIMESTRES = "__all__";
+  const payload = [];
+  const invalids = [];
+  inputs.forEach(inp => {
+    const sId = inp.dataset.student;
+    const aId = inp.dataset.activity;
+    const gId = inp.dataset.gradeId;
+    const val = inp.value.trim().replace(",", ".");
+    const maxPts = parseFloat(inp.dataset.max);
 
-const REPORT_PRINT_CSS = [
-  "*{box-sizing:border-box}",
-  "body{font-family:Inter,'Segoe UI',Arial,sans-serif;color:#1e293b;background:#fff;margin:0;padding:26px;font-size:12px}",
-  "h1{font-size:18px;margin:0 0 2px}",
-  "h2{font-size:15px;margin:0 0 6px}",
-  "table{width:100%;border-collapse:collapse;margin-top:6px}",
-  "th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}",
-  "th{background:#eef3fb;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#475569}",
-  "tfoot td{font-weight:700;background:#f7faff}",
-  ".rep-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:2px solid #1e3a8a;padding-bottom:8px;margin-bottom:14px}",
-  ".rep-head .meta{text-align:right;font-size:11px;color:#475569;line-height:1.5}",
-  ".boleta{page-break-after:always;margin-bottom:26px}",
-  ".boleta:last-child{page-break-after:auto}",
-  ".b-title{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}",
-  ".b-sub{font-size:11px;color:#64748b}",
-  ".b-student{margin-bottom:10px;font-size:12.5px}",
-  ".b-student b{font-size:13.5px}",
-  ".b-period{text-align:right;font-size:11px;line-height:1.5}",
-  ".b-legend{margin-top:8px;font-size:10px;color:#64748b;line-height:1.5}",
-  ".b-sign{display:flex;gap:40px;margin-top:34px}",
-  ".b-sign div{flex:1;border-top:1px solid #94a3b8;padding-top:6px;font-size:10.5px;color:#64748b;text-align:center}",
-  ".bad{color:#b91c1c;font-weight:700}",
-  ".warn{color:#b45309;font-weight:700}",
-  ".ok{color:#047857;font-weight:700}",
-  "@media print{body{padding:0}@page{margin:14mm}}"
-].join("\n");
+    if (val === "") {
+      if (gId) payload.push({ id: gId, studentId: sId, activityId: aId, nota: "" });
+      return;
+    }
 
-function numOrNull(v) {
-  if (v === undefined || v === null) return null;
-  const s = String(v).trim().replace(",", ".");
-  if (s === "") return null;
-  const n = parseFloat(s);
-  return isNaN(n) ? null : n;
-}
+    const num = parseFloat(val);
+    if (isNaN(num) || num < 0 || (!isNaN(maxPts) && num > maxPts)) {
+      invalids.push(`Alumno ${sId}: "${val}" (válido: 0 a ${maxPts})`);
+      return;
+    }
 
-function round1(n) { return Math.round(n * 10) / 10; }
+    payload.push({
+      id: gId || uid(),
+      studentId: sId,
+      activityId: aId,
+      nota: num
+    });
+  });
 
-function fmtNum(n) {
-  const v = numOrNull(n);
-  if (v === null) return "—";
-  const r = round1(v);
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+  if (invalids.length) {
+    toast("Notas inválidas: " + invalids.slice(0, 3).join(" | ") + (invalids.length > 3 ? ` (+${invalids.length - 3} más)` : ""), "err");
+    return;
+  }
+
+  if (!payload.length) {
+    toast("No has ingresado calificaciones aún", "err");
+    return;
+  }
+
+  try {
+    setLoading(true, "Guardando registro de notas...");
+    const r = await apiPost({ action: "save_grades", payload: payload });
+    setLoading(false);
+
+    if (!r || r.error || r.success !== true) {
+      const detail = r ? (r.error || r.message || JSON.stringify(r)) : "sin respuesta";
+      toast("El servidor no confirmó el guardado: " + detail, "err");
+      return;
+    }
+
+    setLoading(true, "Verificando datos guardados...");
+    await loadData();
+    setLoading(false);
+
+    const gradesDb = DB.grades || [];
+    const toCheck = payload.filter(p => p.nota !== "");
+    const notaKeys = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal"];
+    const missing = toCheck.filter(p =>
+      !gradesDb.some(g => {
+        if (String(g.studentId) !== String(p.studentId) || String(g.activityId) !== String(p.activityId)) return false;
+        let stored = "";
+        for (const k of notaKeys) {
+          if (g[k] !== undefined && g[k] !== "") { stored = g[k]; break; }
+        }
+        return parseFloat(String(stored).replace(",", ".")) === p.nota;
+      })
+    );
+
+    if (missing.length > 0) {
+      toast(`⚠️ El servidor respondió OK pero ${missing.length} de ${toCheck.length} nota(s) no aparecen en la hoja "Notas". Revisa los encabezados: id, studentId, activityId, nota`, "err");
+    } else {
+      toast(`¡${toCheck.length} calificación(es) guardadas y verificadas!`, "ok");
+    }
+    renderView();
+  } catch (err) {
+    setLoading(false);
+    toast("Error al guardar: " + err.message, "err");
+  }
 }
 
 function actPoints(a) {
