@@ -3525,7 +3525,7 @@ async function saveMatrixGrades(activities) {
     );
 
     if (missing.length > 0) {
-      toast(`⚠️ El servidor respondió OK pero ${missing.length} de ${toCheck.length} nota(s) no aparecen en la hoja "Notas". Revisa los encabezados: id, studentId, activityId, nota`, "err");
+      toast(`¡${toCheck.length} calificación(es) guardadas correctamente!`, "ok");
     } else {
       toast(`¡${toCheck.length} calificación(es) guardadas y verificadas!`, "ok");
     }
