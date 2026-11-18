@@ -3165,6 +3165,10 @@ function renderMatrixGrades(c) {
       const text = tr.innerText.toLowerCase();
       tr.style.display = text.includes(term) ? "" : "none";
     });
+    $$(".matrix-card-mobile").forEach(card => {
+      const text = card.innerText.toLowerCase();
+      card.style.display = text.includes(term) ? "" : "none";
+    });
   });
 
   c.querySelectorAll(".matrix-grade-input").forEach(inp => {
