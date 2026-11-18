@@ -838,7 +838,7 @@ function batchUpdate(sheetName, payloadArray, requiredIdCols) {
   const bIdIdx = headers.indexOf("bimestreId");
   const dIdx = headers.indexOf("date");
 
-  const notaLike = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal"];
+  const notaLike = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal", "points"];
   let notaCol = null;
   notaLike.forEach(function (c) {
     if (notaCol === null && headers.indexOf(c) !== -1) notaCol = c;
