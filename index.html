@@ -3189,12 +3189,18 @@ function renderMatrixGrades(c) {
 
             return `
               <div class="matrix-card-mobile" id="mcard_${esc(s.id)}">
+                <div style="margin-bottom:8px; font-size:11px; color:var(--text-dim);">
+                    ${esc(relLabel("materia", mg.materia))} · ${esc(relLabel("bimestre", mg.bimestre))}
+                </div>
                 <h3>
                   <div>
                     <div style="font-weight:800; color:var(--text);">${sName}</div>
                     <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Total Zona: <b style="color:var(--primary);" id="mtotal_${esc(s.id)}">${rowTotal}</b></div>
                   </div>
-                  <button class="btn ghost sm" type="button" onclick="printStudentGrades('${esc(s.id)}')" style="padding:6px; min-width:auto;">🖨️</button>
+                  <div style="display:flex; gap:4px;">
+                    <button class="btn ghost sm" type="button" onclick="printStudentGrades('${esc(s.id)}')" style="padding:6px; min-width:auto;">🖨️</button>
+                    ${editable ? `<button class="btn primary sm" type="button" onclick="saveMatrixGrades()" style="padding:6px 12px;">Guardar</button>` : ''}
+                  </div>
                 </h3>
                 <div style="background:var(--surface-ground); border-radius:var(--radius-sm); padding:4px 12px;">
                   ${actsHtml}
