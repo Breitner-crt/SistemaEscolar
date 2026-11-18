@@ -649,6 +649,29 @@
       .acc-head .acc-meta { font-size: 11px; max-width: 130px; white-space: normal; text-align: right; line-height: 1.2; }
       .acc-head .acc-title { white-space: normal; overflow: visible; text-overflow: clip; }
       
+      /* Mejoras para Calificaciones en móvil */
+      .matrix-card-mobile { 
+        border: 1px solid var(--surface-border); 
+        border-radius: var(--radius-md); 
+        padding: 16px; 
+        margin-bottom: 12px; 
+        background: var(--surface-card);
+      }
+      .matrix-card-mobile h3 { font-size: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; }
+      .matrix-card-mobile .act-row { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        padding: 8px 0; 
+        border-bottom: 1px solid var(--surface-border-subtle);
+      }
+      .matrix-card-mobile .act-row:last-child { border-bottom: none; }
+      .matrix-card-mobile .act-info { flex: 1; margin-right: 12px; }
+      .matrix-card-mobile .act-name { font-size: 12px; font-weight: 600; color: var(--text); }
+      .matrix-card-mobile .act-pts { font-size: 10px; color: var(--text-dim); }
+      .table-wrap:has(#matrixGradesTable) { display: none; }
+      .mobile-matrix-list { display: block !important; }
+      
       /* Mejoras para Asistencia en móvil */
       .att-card-mobile { 
         border: 1px solid var(--surface-border); 
@@ -677,6 +700,7 @@
       .att-table-wrap:has(#batchTable) { display: none; }
       .mobile-att-list { display: block !important; }
     }
+    .mobile-matrix-list { display: none; }
     .mobile-att-list { display: none; }
   </style>
 </head>
