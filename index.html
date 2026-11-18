@@ -648,7 +648,31 @@
       .acc-head { padding: 10px 12px; gap: 8px; font-size: 13px; }
       .acc-head .acc-meta { font-size: 11px; max-width: 130px; white-space: normal; text-align: right; line-height: 1.2; }
       .acc-head .acc-title { white-space: normal; overflow: visible; text-overflow: clip; }
+      
+      /* Mejoras para Calificaciones en móvil */
+      .matrix-card-mobile { 
+        border: 1px solid var(--surface-border); 
+        border-radius: var(--radius-md); 
+        padding: 16px; 
+        margin-bottom: 12px; 
+        background: var(--surface-card);
+      }
+      .matrix-card-mobile h3 { font-size: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; }
+      .matrix-card-mobile .act-row { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        padding: 8px 0; 
+        border-bottom: 1px solid var(--surface-border-subtle);
+      }
+      .matrix-card-mobile .act-row:last-child { border-bottom: none; }
+      .matrix-card-mobile .act-info { flex: 1; margin-right: 12px; }
+      .matrix-card-mobile .act-name { font-size: 12px; font-weight: 600; color: var(--text); }
+      .matrix-card-mobile .act-pts { font-size: 10px; color: var(--text-dim); }
+      .table-wrap:has(#matrixGradesTable) { display: none; }
+      .mobile-matrix-list { display: block !important; }
     }
+    .mobile-matrix-list { display: none; }
   </style>
 </head>
 <body>
@@ -3072,6 +3096,56 @@ function renderMatrixGrades(c) {
             </tbody>
           </table>
         </div>
+
+        <div class="mobile-matrix-list" style="padding:10px;">
+          ${students.map(s => {
+            const sName = esc(s.name || s.nombre || "Alumno");
+            let rowTotal = 0;
+            const actsHtml = activities.map(act => {
+              const rec = gradesMap[String(s.id) + "_" + String(act.id)] || { id: null, val: "" };
+              const vNum = parseFloat(String(rec.val).replace(",", "."));
+              if (!isNaN(vNum)) rowTotal += vNum;
+              const maxPts = act.puntajeMax || act.puntaje || act.puntos || act.max || 10;
+              const dis = editable ? "" : " disabled";
+              return `
+                <div class="act-row">
+                  <div class="act-info">
+                    <div class="act-name">${esc(act.nombre || act.name || act.titulo || "Actividad")}</div>
+                    <div class="act-pts">Máximo: ${maxPts} pts</div>
+                  </div>
+                  <input 
+                    class="in matrix-grade-input" 
+                    type="text" 
+                    inputmode="decimal"
+                    data-student="${esc(s.id)}" 
+                    data-activity="${esc(act.id)}"
+                    data-grade-id="${rec.id ? esc(rec.id) : ''}"
+                    data-max="${esc(maxPts)}"
+                    value="${rec.val !== '' ? esc(rec.val) : ''}"
+                    placeholder="0"
+                    style="max-width:70px; text-align:center; font-weight:700;"
+                    ${dis}
+                  >
+                </div>
+              `;
+            }).join("");
+
+            return `
+              <div class="matrix-card-mobile" id="mcard_${esc(s.id)}">
+                <h3>
+                  <div>
+                    <div style="font-weight:800; color:var(--text);">${sName}</div>
+                    <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Total Zona: <b style="color:var(--primary);" id="mtotal_${esc(s.id)}">${rowTotal}</b></div>
+                  </div>
+                  <button class="btn ghost sm" type="button" onclick="printStudentGrades('${esc(s.id)}')" style="padding:6px; min-width:auto;">🖨️</button>
+                </h3>
+                <div style="background:var(--surface-ground); border-radius:var(--radius-sm); padding:4px 12px;">
+                  ${actsHtml}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
       </div>
     `;
   }
@@ -3109,6 +3183,8 @@ function renderMatrixGrades(c) {
       });
       const totEl = document.getElementById("total_" + sId);
       if (totEl) totEl.textContent = Math.round(total * 100) / 100;
+      const mtotEl = document.getElementById("mtotal_" + sId);
+      if (mtotEl) mtotEl.textContent = Math.round(total * 100) / 100;
     });
   });
 
