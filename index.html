@@ -3199,7 +3199,7 @@ function renderMatrixGrades(c) {
                   </div>
                   <div style="display:flex; gap:4px;">
                     <button class="btn ghost sm" type="button" onclick="printStudentGrades('${esc(s.id)}')" style="padding:6px; min-width:auto;">🖨️</button>
-                    ${editable ? `<button class="btn primary sm" type="button" onclick="saveMatrixGrades()" style="padding:6px 12px;">Guardar</button>` : ''}
+                    ${editable ? `<button class="btn primary sm" type="button" onclick="saveStudentGrades('${esc(s.id)}')" style="padding:6px 12px;">Guardar Alumno</button>` : ''}
                   </div>
                 </h3>
                 <div style="background:var(--surface-ground); border-radius:var(--radius-sm); padding:4px 12px;">
@@ -3390,7 +3390,66 @@ function printStudentGrades(studentId) {
   printDoc("Reporte " + labelOf(s), fullHtml);
 }
 
-async function saveMatrixGrades(activities) {
+async function saveStudentGrades(studentId) {
+  const inputs = $$(`.matrix-grade-input[data-student="${studentId}"]`);
+  if (!inputs.length) {
+    toast("No hay calificaciones para guardar en este alumno", "err");
+    return;
+  }
+
+  const payload = [];
+  const invalids = [];
+  inputs.forEach(inp => {
+    const sId = inp.dataset.student;
+    const aId = inp.dataset.activity;
+    const gId = inp.dataset.gradeId;
+    const val = inp.value.trim().replace(",", ".");
+    const maxPts = parseFloat(inp.dataset.max);
+
+    if (val === "") {
+      if (gId) payload.push({ id: gId, studentId: sId, activityId: aId, nota: "" });
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (isNaN(num) || num < 0 || (!isNaN(maxPts) && num > maxPts)) {
+      invalids.push(`Alumno ${sId}: "${val}" (válido: 0 a ${maxPts})`);
+      return;
+    }
+    payload.push({ id: gId || "", studentId: sId, activityId: aId, nota: num });
+  });
+
+  if (invalids.length) {
+    toast("Errores en: " + invalids.slice(0, 3).join(", "), "err");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const resp = await apiPost("save_grades", { grades: payload });
+    if (resp.error) throw new Error(resp.error);
+    toast("Calificaciones guardadas correctamente", "ok");
+    
+    // Sincronizar estado local
+    (resp.grades || []).forEach(g => {
+      const existingIdx = DB.grades.findIndex(x => String(x.id) === String(g.id));
+      if (existingIdx > -1) DB.grades[existingIdx] = g;
+      else DB.grades.push(g);
+    });
+    
+    // Actualizar IDs en los inputs para futuras ediciones
+    inputs.forEach(inp => {
+      const g = DB.grades.find(x => String(x.studentId) === String(inp.dataset.student) && String(x.activityId) === String(inp.dataset.activity));
+      if (g) inp.dataset.gradeId = g.id;
+    });
+
+  } catch (err) {
+    toast("Error al guardar: " + err.message, "err");
+  } finally {
+    setLoading(false);
+  }
+}
+
   const inputs = $$(".matrix-grade-input");
   if (!inputs.length) {
     toast("No hay calificaciones para guardar", "err");
