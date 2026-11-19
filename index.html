@@ -982,6 +982,52 @@ const state = {
   attReport: { desde: "", hasta: "", grado: "", seccion: "", q: "", detalle: false }
 };
 
+const ALL_BIMESTRES = "__all__";
+
+const REPORT_PRINT_CSS = [
+  "*{box-sizing:border-box}",
+  "body{font-family:Inter,'Segoe UI',Arial,sans-serif;color:#1e293b;background:#fff;margin:0;padding:26px;font-size:12px}",
+  "h1{font-size:18px;margin:0 0 2px}",
+  "h2{font-size:15px;margin:0 0 6px}",
+  "table{width:100%;border-collapse:collapse;margin-top:6px}",
+  "th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}",
+  "th{background:#eef3fb;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#475569}",
+  "tfoot td{font-weight:700;background:#f7faff}",
+  ".rep-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:2px solid #1e3a8a;padding-bottom:8px;margin-bottom:14px}",
+  ".rep-head .meta{text-align:right;font-size:11px;color:#475569;line-height:1.5}",
+  ".boleta{page-break-after:always;margin-bottom:26px}",
+  ".boleta:last-child{page-break-after:auto}",
+  ".b-title{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}",
+  ".b-sub{font-size:11px;color:#64748b}",
+  ".b-student{margin-bottom:10px;font-size:12.5px}",
+  ".b-student b{font-size:13.5px}",
+  ".b-period{text-align:right;font-size:11px;line-height:1.5}",
+  ".b-legend{margin-top:8px;font-size:10px;color:#64748b;line-height:1.5}",
+  ".b-sign{display:flex;gap:40px;margin-top:34px}",
+  ".b-sign div{flex:1;border-top:1px solid #94a3b8;padding-top:6px;font-size:10.5px;color:#64748b;text-align:center}",
+  ".bad{color:#b91c1c;font-weight:700}",
+  ".warn{color:#b45309;font-weight:700}",
+  ".ok{color:#047857;font-weight:700}",
+  "@media print{body{padding:0}@page{margin:14mm}}"
+].join("\n");
+
+function numOrNull(v) {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim().replace(",", ".");
+  if (s === "") return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
+
+function fmtNum(n) {
+  const v = numOrNull(n);
+  if (v === null) return "—";
+  const r = round1(v);
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 
