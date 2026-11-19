@@ -50,7 +50,7 @@ function cacheDropSheet(sheetName) {
 function cacheDropAll() {
   cacheDrop(CACHE_KEY);
   ["Estudiantes", "Grados", "Secciones", "Actividades", "Examenes", "Asistencia",
-   "Notas", "Bimestres", "Materias", "Usuarios", "UsuariosPP", "AsignacionesDocentes"]
+   "Notas", "Bimestres", "Materias", "Usuarios", "UsuariosPP", "PadresHijos", "AsignacionesDocentes"]
     .forEach(function (n) { cacheDropSheet(n); });
 }
 
@@ -83,6 +83,7 @@ function doGet(e) {
         materias: getSheetDataCached("Materias"),
         users: getSheetDataCached("Usuarios"),
         padres: getSheetDataCached("UsuariosPP"),
+        padres_hijos: getSheetDataCached("PadresHijos"),
         teacher_assignments: getSheetDataCached("AsignacionesDocentes")
       };
 
@@ -308,6 +309,7 @@ function makeToken(user) {
     u: String(user.id),
     r: String(user.rol || "padre"),
     n: String(user.nombre || ""),
+    usuario: String(user.usuario || ""),
     e: Date.now() + TOKEN_TTL_MS
   });
 }
@@ -408,12 +410,70 @@ function scopePayload(payload, auth) {
   if (role === "docente") {
     payload.users = [];
     payload.padres = [];
+    payload.padres_hijos = [];
     return payload;
   }
 
   const me = (payload.padres || []).find(function (p) { return String(p.id) === String(auth.u); });
   const ids = {};
   parseChildIds(me && me.childrenIds).forEach(function (id) { ids[id] = true; });
+
+  // Claves del padre: id de UsuariosPP, usuario del token y usuario de su fila
+  const misClaves = [];
+  [auth.u, auth.usuario, auth.n, me && getFieldCI(me, ["usuario", "username", "user", "email", "correo", "login"]), me && getFieldCI(me, ["nombre", "name", "nombres"])]
+    .forEach(function (v) {
+      const s = String(v === undefined || v === null ? "" : v).trim().toLowerCase();
+      if (s && misClaves.indexOf(s) === -1) misClaves.push(s);
+    });
+
+  // Devuelve el primer valor no vacío entre los nombres de columna candidatos
+  const pickLink = function (l, cands) {
+    for (var i = 0; i < cands.length; i++) {
+      const v = getFieldCI(l, [cands[i]]);
+      if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+    }
+    return "";
+  };
+
+  // Vinculación por la hoja relacional PadresHijos
+  const misLinks = [];
+  (payload.padres_hijos || []).forEach(function (l) {
+    const activo = String(pickLink(l, ["activo", "estado", "active", "vigente"]) || "SI").trim().toUpperCase();
+    if (activo === "NO" || activo === "FALSE" || activo === "0" || activo === "INACTIVO") return;
+
+    const sid = pickLink(l, ["studentId", "estudianteId", "alumnoId", "idEstudiante", "student_id", "estudiante", "alumno", "student"]);
+    if (!sid) return;
+
+    const padreId = pickLink(l, ["padreId", "parentId", "idPadre", "apoderadoId", "padre_id", "padre", "apoderado", "tutor"]).toLowerCase();
+    const linkUser = pickLink(l, ["usuario", "username", "user", "email", "correo", "login"]).toLowerCase();
+
+    const coincide = (padreId && misClaves.indexOf(padreId) > -1) || (linkUser && misClaves.indexOf(linkUser) > -1);
+    if (!coincide) return;
+
+    // El vínculo puede traer el id del estudiante o su nombre completo
+    const sidKey = sid.toLowerCase();
+    const byId = (payload.students || []).find(function (s) {
+      return String(s.id === undefined || s.id === null ? "" : s.id).trim().toLowerCase() === sidKey;
+    });
+    if (byId) {
+      ids[String(byId.id)] = true;
+    } else {
+      const byCode = (payload.students || []).find(function (s) {
+        return String(getFieldCI(s, ["codigo", "code", "codigoEstudiante", "dni"]) || "").trim().toLowerCase() === sidKey;
+      });
+      if (byCode) {
+        ids[String(byCode.id)] = true;
+      } else {
+        const byName = (payload.students || []).find(function (s) {
+          return String(getFieldCI(s, ["nombre", "name", "nombres"]) || "").trim().toLowerCase() === sidKey;
+        });
+        if (byName) ids[String(byName.id)] = true;
+      }
+    }
+    misLinks.push(l);
+  });
+
+  // Compatibilidad: columna padreId dentro de la hoja Estudiantes
   (payload.students || []).forEach(function (s) {
     if (String(s.padreId || "") === String(auth.u)) ids[String(s.id)] = true;
   });
@@ -424,6 +484,7 @@ function scopePayload(payload, auth) {
   payload.exams = (payload.exams || []).filter(keep);
   payload.attendance = (payload.attendance || []).filter(keep);
   payload.padres = me ? [me] : [];
+  payload.padres_hijos = misLinks;
   payload.users = [];
   payload.teacher_assignments = [];
   return payload;

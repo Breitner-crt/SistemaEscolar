@@ -861,6 +861,7 @@ const FALLBACK_HEADERS = {
   activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax"],
   users: ["id","usuario","contraseña","nombre","rol"],
   padres: ["id","nombre","usuario","contraseña","telefono","childrenIds"],
+  padres_hijos: ["id","padreId","usuario","studentId","parentesco","activo"],
   grades: ["id","studentId","activityId","nota"],
   exams: ["id","studentId","materiaId","bimestreId","nota"],
   attendance: ["id","studentId","date","status","comment"],
@@ -1460,11 +1461,55 @@ function childrenOf() {
   const allStudents = DB.students || [];
   if (!allStudents.length) return [];
 
+  const pick = (o, cands) => {
+    if (!o) return "";
+    const map = {};
+    Object.keys(o).forEach(k => { map[String(k).toLowerCase()] = k; });
+    for (let i = 0; i < cands.length; i++) {
+      const k = map[cands[i]];
+      if (k !== undefined && o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== "") return String(o[k]).trim();
+    }
+    return "";
+  };
+  const yo = [];
+  [USER.id, USER.usuario, USER.email, USER.correo, USER.nombre].forEach(v => {
+    const s = String(v === undefined || v === null ? "" : v).trim().toLowerCase();
+    if (s && yo.indexOf(s) === -1) yo.push(s);
+  });
+
+  // 1) Hoja relacional PadresHijos (prioridad)
+  const links = DB.padres_hijos || DB.padresHijos || [];
+  if (links.length) {
+    const sids = {};
+    links.forEach(l => {
+      const act = pick(l, ["activo", "estado", "active", "vigente"]).toUpperCase();
+      if (act === "NO" || act === "FALSE" || act === "0" || act === "INACTIVO") return;
+      const pid = pick(l, ["padreid", "parentid", "idpadre", "apoderadoid", "padre_id", "padre", "apoderado", "tutor"]).toLowerCase();
+      const lu = pick(l, ["usuario", "username", "user", "email", "correo", "login"]).toLowerCase();
+      if (!(pid && yo.indexOf(pid) > -1) && !(lu && yo.indexOf(lu) > -1)) return;
+      const sid = pick(l, ["studentid", "estudianteid", "alumnoid", "idestudiante", "student_id", "estudiante", "alumno", "student"]);
+      if (sid) sids[sid.toLowerCase()] = true;
+    });
+    const kids = allStudents.filter(s => {
+      const id = String(s.id === undefined || s.id === null ? "" : s.id).trim().toLowerCase();
+      if (sids[id]) return true;
+      const code = String(s.codigo || s.code || s.codigoEstudiante || s.dni || "").trim().toLowerCase();
+      if (code && sids[code]) return true;
+      const nm = String(s.nombre || s.name || s.nombres || "").trim().toLowerCase();
+      return !!(nm && sids[nm]);
+    });
+    if (kids.length) return kids;
+  }
+
+  // 2) Respaldo: childrenIds del padre y columna padreId en Estudiantes
   const myChildrenIds = new Set();
   childIdList(USER.childrenIds).forEach(id => myChildrenIds.add(id));
 
-  const pRecord = (DB.padres || []).find(p => String(p.id) === String(USER.id) || String(p.usuario || p.username).toLowerCase() === String(USER.usuario).toLowerCase());
+  const pRecord = (DB.padres || []).find(p => String(p.id) === String(USER.id) || String(p.usuario || p.username || "").toLowerCase() === String(USER.usuario || "").toLowerCase());
   if (pRecord) childIdList(pRecord.childrenIds).forEach(id => myChildrenIds.add(id));
+
+  yo.forEach(v => myChildrenIds.add(v));
+  myChildrenIds.add(String(USER.id));
 
   if (myChildrenIds.size > 0) {
     const matched = allStudents.filter(s => myChildrenIds.has(String(s.id).trim()));
@@ -1475,21 +1520,10 @@ function childrenOf() {
   const pf = keys.find(k => /padre|apoderado|parent|familia|madre/i.test(k));
   if (!pf) return myChildrenIds.size > 0 ? [] : null;
 
-  const uk = userKeys();
-  const ids = new Set([String(USER.id)]);
-  if (uk.u && USER[uk.u]) ids.add(String(USER[uk.u]).toLowerCase());
-  if (uk.n && USER[uk.n]) ids.add(String(USER[uk.n]).toLowerCase());
-  (DB.padres || []).forEach(p => {
-    const pu = uk.u ? p[uk.u] : null;
-    const pn = uk.n ? p[uk.n] : null;
-    if (pu && USER[uk.u] && String(pu).toLowerCase() === String(USER[uk.u]).toLowerCase()) ids.add(String(p.id));
-    if (pn && USER[uk.n] && String(pn).toLowerCase() === String(USER[uk.n]).toLowerCase()) ids.add(String(p.id));
-  });
-
   return allStudents.filter(s => {
     const raw = s[pf];
     if (raw === undefined || raw === null || String(raw).trim() === "") return false;
-    return ids.has(String(raw)) || ids.has(String(raw).toLowerCase());
+    return myChildrenIds.has(String(raw)) || myChildrenIds.has(String(raw).toLowerCase());
   });
 }
 
@@ -1501,7 +1535,7 @@ function visibleStudents() {
   }
   if (USER.rol === "padre") {
     const kids = childrenOf();
-    if (kids) list = kids;
+    list = kids || [];
   }
   return list;
 }
@@ -1730,8 +1764,8 @@ function renderDashboard(c) {
     const uniq = arr => arr.filter((v, i) => arr.indexOf(v) === i);
     extra = `<div class="hint" style="margin-bottom:20px;">🎓 Dictas en: <b>${esc(uniq(gNames).join(", "))}</b> — Sección(es): <b>${esc(uniq(sNames).join(", "))}</b></div>`;
   }
-  if (role === "padre" && kids === null) {
-    extra = '<div class="hint" style="margin-bottom:20px; border-color:var(--danger); color:#b91c1c; background:rgba(220,38,38,0.06);">⚠️ No se encontró un vínculo entre tu cuenta y los alumnos. El administrador debe registrar tu ID en la columna "padreId" de la hoja Estudiantes.</div>';
+  if (role === "padre" && (!kids || !kids.length)) {
+    extra = '<div class="hint" style="margin-bottom:20px; border-color:var(--danger); color:#b91c1c; background:rgba(220,38,38,0.06);">⚠️ No se encontró un vínculo entre tu cuenta y los alumnos. El administrador debe registrar la relación en la hoja <b>PadresHijos</b> (columnas <b>usuario</b> y <b>studentId</b>) o en la columna "padreId" de la hoja <b>Estudiantes</b>.</div>';
   }
 
   const COUNTERS = {
