@@ -857,7 +857,7 @@ const FALLBACK_HEADERS = {
   grados: ["id","nombre","descripcion"],
   secciones: ["id","nombre","gradoId"],
   materias: ["id","nombre","descripcion"],
-  bimestres: ["id","nombre","fechaInicio","fechaFin"],
+  bimestres: ["id","nombre","start","end","active"],
   activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax"],
   users: ["id","usuario","contraseña","nombre","rol"],
   padres: ["id","nombre","usuario","contraseña","telefono","childrenIds"],
@@ -1064,6 +1064,9 @@ function pretty(k) {
   if (/^username$/i.test(s.trim())) return "Usuario";
   if (/^password$/i.test(s.trim())) return "Contraseña";
   if (/^role$/i.test(s.trim())) return "Rol";
+  if (/^start$/i.test(s.trim())) return "Inicio";
+  if (/^end$/i.test(s.trim())) return "Fin";
+  if (/^active$/i.test(s.trim())) return "Activo";
   if (/^(childrenids|hijos|children|estudiantesids)$/i.test(s.replace(/\s+/g, ""))) return "Hijos";
   return s.replace(/\b\w/g, c => c.toUpperCase()).trim();
 }
@@ -1072,6 +1075,59 @@ function datePart(v) {
   if (v === undefined || v === null) return "";
   const s = String(v);
   return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function fmtDate(v) {
+  const s = datePart(v);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return s;
+  return m[3] + "/" + m[2] + "/" + m[1];
+}
+
+function ciGet(o, names) {
+  if (!o) return undefined;
+  const map = {};
+  Object.keys(o).forEach(k => { map[String(k).toLowerCase()] = k; });
+  for (let i = 0; i < names.length; i++) {
+    const k = map[String(names[i]).toLowerCase()];
+    if (k !== undefined && o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== "") return o[k];
+  }
+  return undefined;
+}
+
+function isoDate(v) {
+  if (v === undefined || v === null) return "";
+  if (v instanceof Date && !isNaN(v)) {
+    return v.getFullYear() + "-" + String(v.getMonth() + 1).padStart(2, "0") + "-" + String(v.getDate()).padStart(2, "0");
+  }
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return m[1] + "-" + m[2] + "-" + m[3];
+  m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(s);
+  if (m) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+  return "";
+}
+
+function bimestreRange(b) {
+  if (!b) return null;
+  const start = isoDate(ciGet(b, ["start", "fechaInicio", "inicio", "fecha_inicio"]));
+  const end = isoDate(ciGet(b, ["end", "fechaFin", "fin", "fecha_fin"]));
+  if (!start || !end) return null;
+  return { start, end };
+}
+
+function activityOutOfRange(act) {
+  if (!act) return null;
+  const bId = ciGet(act, ["bimestreId", "bimestre", "idBimestre", "termId"]);
+  if (bId === undefined || bId === null || String(bId).trim() === "") return null;
+  const bKey = String(bId).trim().toLowerCase();
+  const b = (DB.bimestres || []).find(x => String(x.id).trim().toLowerCase() === bKey || String(labelOf(x)).trim().toLowerCase() === bKey);
+  const r = bimestreRange(b);
+  if (!r) return null;
+  const f = isoDate(ciGet(act, ["fecha", "date", "fechaActividad"]));
+  if (!f) return null;
+  if (f >= r.start && f <= r.end) return null;
+  return { fecha: f, start: r.start, end: r.end, bimestre: labelOf(b) || String(bId) };
 }
 
 function relKindOfColumn(h) {
@@ -1101,7 +1157,11 @@ function displayValue(h, v) {
     if (!hit) hit = list.find(o => String(labelOf(o)).toLowerCase() === id.toLowerCase());
     if (hit) return labelOf(hit);
   }
-  if (/fecha|date|inicio|fin/i.test(h)) return datePart(v);
+  if (/fecha|date|inicio|fin|start|end/i.test(h)) return fmtDate(v);
+  if (/^(active|activo)$/i.test(String(h).trim())) {
+    const b = String(v).trim().toLowerCase();
+    return (b === "true" || b === "1" || b === "si" || b === "sí" || b === "x") ? "Sí" : "No";
+  }
   if (/contrase|password|clave/i.test(h)) return "••••••••";
   return String(v);
 }
@@ -2179,6 +2239,7 @@ function activityRowHtml(a, editable, idx) {
   const desc = esc(a.descripcion || a.description || "");
   const bLabel = relLabel("bimestre", relGet(a, "bimestre"));
   const fecha = datePart(a.fecha !== undefined ? a.fecha : (a.date || a.fechaInicio || ""));
+  const late = activityOutOfRange(a);
   const pts = a.puntajeMax !== undefined && a.puntajeMax !== "" ? a.puntajeMax : (a.puntaje || a.puntos || "");
   const alt = (idx % 2 === 1) ? " alt" : "";
   return `
@@ -2189,7 +2250,8 @@ function activityRowHtml(a, editable, idx) {
       </div>
       <div class="acc-act-tags">
         ${bLabel ? `<span class="badge info">${esc(bLabel)}</span>` : ""}
-        ${fecha ? `<span class="badge">${esc(fecha)}</span>` : ""}
+        ${fecha ? `<span class="badge">${esc(fmtDate(fecha))}</span>` : ""}
+        ${late ? `<span class="badge warning" title="Fecha fuera del rango del bimestre">Extemporánea</span>` : ""}
         ${pts !== "" ? `<span class="badge warning">${esc(pts)} pts</span>` : ""}
       </div>
       ${editable ? `
@@ -2336,7 +2398,14 @@ function fieldHtml(h, val, key) {
       '</select>';
   } else if (/contrase|password|clave|pwd/i.test(kl)) {
     inner = '<input class="in" type="password" name="' + name + '" value="' + esc(v) + '" placeholder="Contraseña (vacío = no cambiar)">';
-  } else if (/fecha|date|nacimiento|inicio|fin/i.test(kl)) {
+  } else if (/^(active|activo)$/i.test(kl)) {
+    const s = String(v).trim().toLowerCase();
+    const on = v === true || s === "true" || s === "1" || s === "si" || s === "sí" || s === "x";
+    inner = '<select class="in" name="' + name + '">' +
+      '<option value="true"' + (on ? ' selected' : '') + '>Sí</option>' +
+      '<option value="false"' + (!on ? ' selected' : '') + '>No</option>' +
+      '</select>';
+  } else if (/fecha|date|nacimiento|inicio|fin|start|end/i.test(kl)) {
     inner = '<input class="in" type="date" name="' + name + '" value="' + esc(datePart(v)) + '">';
   } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|telefono|fono|codigo|puntajemax/i.test(kl)) {
     inner = '<input class="in" type="number" step="any" name="' + name + '" value="' + esc(v) + '">';
@@ -2437,6 +2506,21 @@ function setupActivityCascade(ov) {
   if (!gSel || !mSel) return;
   syncMateriaOptions(gSel, mSel);
   gSel.addEventListener("change", () => syncMateriaOptions(gSel, mSel));
+
+  const bSel = selects.find(s => /bimestre|term|periodo/i.test(s.name));
+  if (bSel) {
+    const hint = document.createElement("small");
+    hint.style.cssText = "display:block;color:var(--text-muted);font-size:11.5px;margin-top:4px";
+    const label = bSel.closest("label");
+    if (label) label.appendChild(hint);
+    const paint = () => {
+      const b = (DB.bimestres || []).find(x => String(x.id) === String(bSel.value));
+      const r = bimestreRange(b);
+      hint.textContent = r ? "Rango del bimestre: " + fmtDate(r.start) + " – " + fmtDate(r.end) : "";
+    };
+    bSel.addEventListener("change", paint);
+    paint();
+  }
 }
 
 function openRecordModal(key, record, after) {
@@ -2478,6 +2562,15 @@ function openRecordModal(key, record, after) {
       if (key === "materias" && USER && USER.rol === "docente") {
         if ((out.gradoId === undefined || out.gradoId === "") && def.gradoId) out.gradoId = def.gradoId;
       }
+      if (key === "activities") {
+        const issue = activityOutOfRange(out);
+        if (issue) {
+          const msg = "La fecha " + fmtDate(issue.fecha) + " está fuera del rango del " + issue.bimestre +
+            " (" + fmtDate(issue.start) + " – " + fmtDate(issue.end) + ").\n\n" +
+            "¿Deseas registrarla de todos modos como actividad extemporánea?";
+          if (!confirm(msg)) return;
+        }
+      }
       try {
         setLoading(true, "Guardando registro...");
         const r = await apiPost({ action: SAVE_ACTIONS[key], payload: out });
@@ -2517,7 +2610,7 @@ async function deleteRecord(key, rec, after) {
 
 function colType(key, rows) {
   if (/estado|asistencia|status|presente|observacion/i.test(key)) return "select";
-  if (/fecha|date|nacimiento|inicio|fin/i.test(key)) return "date";
+  if (/fecha|date|nacimiento|inicio|fin|start|end/i.test(key)) return "date";
   if (/nota|puntaje|score|valor|calific|promedio|total|puntos/i.test(key)) return "number";
   const vals = (rows || []).map(r => r[key]).filter(v => v !== "" && v !== undefined && v !== null);
   if (vals.length && vals.every(v => !isNaN(Number(v)))) return "number";
