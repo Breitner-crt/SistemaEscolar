@@ -1190,8 +1190,6 @@ function activityOutOfRange(act) {
   if (!r) return null;
   const f = isoDate(ciGet(act, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"]));
   if (!f) return null;
-  // DEBUG - abrir consola del navegador (F12) para ver estos valores
-  console.log("🔍 activityOutOfRange debug:", { bId, bKey, b: b ? b.id : null, r: r, f, inRange: f >= r.start && f <= r.end });
   if (f >= r.start && f <= r.end) return null;
   return { fecha: f, start: r.start, end: r.end, bimestre: labelOf(b) || String(bId) };
 }
