@@ -1131,6 +1131,47 @@ function isValidISODate(iso) {
   return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
 }
 
+function confirmCustom(msg) {
+  return new Promise(resolve => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML =
+      '<div class="modal">' +
+      '<div class="mh"><h3>Confirmar</h3><button class="x" type="button" data-close>&times;</button></div>' +
+      '<div class="mc"><p>' + esc(msg) + '</p></div>' +
+      '<div class="mf">' +
+        '<button class="btn ghost" data-cancel>No</button>' +
+        '<button class="btn primary" data-accept>Sí</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    
+    const modal = ov.querySelector(".modal");
+    const btnCancel = ov.querySelector("[data-cancel]");
+    const btnAccept = ov.querySelector("[data-accept]");
+    const closeBtn = ov.querySelector("[data-close]");
+    
+    function cleanup() {
+      ov.remove();
+    }
+    
+    const yes = () => { cleanup(); resolve(true); };
+    const no = () => { cleanup(); resolve(false); };
+    
+    btnAccept.addEventListener("click", yes);
+    btnCancel.addEventListener("click", no);
+    closeBtn.addEventListener("click", no);
+    ov.addEventListener("click", e => {
+      if (e.target === ov) no();
+    });
+    
+    // Focus trap keydown
+    ov.addEventListener("keydown", e => {
+      if (e.key === "Escape") { no(); }
+    });
+  });
+}
+
 function bimestreDateRange(b) {
   if (!b) return null;
   const start = isoDate(ciGet(b, ["start", "inicio", "fechaInicio", "fecha inicio", "fecha_inicio", "startDate", "desde"]));
@@ -2641,13 +2682,55 @@ function openRecordModal(key, record, after) {
       if (key === "materias" && USER && USER.rol === "docente") {
         if ((out.gradoId === undefined || out.gradoId === "") && def.gradoId) out.gradoId = def.gradoId;
       }
-      if (key === "activities") {
+      function confirmCustom(msg) {
+  return new Promise(resolve => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML =
+      '<div class="modal">' +
+      '<div class="mh"><h3>Confirmar</h3><button class="x" type="button" data-close>&times;</button></div>' +
+      '<div class="mc"><p>' + esc(msg) + '</p></div>' +
+      '<div class="mf">' +
+        '<button class="btn ghost" data-cancel>No</button>' +
+        '<button class="btn primary" data-accept>Sí</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    
+    const modal = ov.querySelector(".modal");
+    const btnCancel = ov.querySelector("[data-cancel]");
+    const btnAccept = ov.querySelector("[data-accept]");
+    const closeBtn = ov.querySelector("[data-close]");
+    
+    function cleanup() {
+      ov.remove();
+    }
+    
+    const yes = () => { cleanup(); resolve(true); };
+    const no = () => { cleanup(); resolve(false); };
+    
+    btnAccept.addEventListener("click", yes);
+    btnCancel.addEventListener("click", no);
+    closeBtn.addEventListener("click", no);
+    ov.addEventListener("click", e => {
+      if (e.target === ov) no();
+    });
+    
+    // Focus trap keydown
+    ov.addEventListener("keydown", e => {
+      if (e.key === "Escape") { no(); }
+    });
+  });
+}
+
+if (key === "activities") {
         const issue = activityOutOfRange(out);
         if (issue) {
           const msg = "La fecha " + fmtDate(issue.fecha) + " está fuera del rango del " + issue.bimestre +
             " (" + fmtDate(issue.start) + " – " + fmtDate(issue.end) + ").\n\n" +
             "Se registrará como actividad extemporánea.";
-          alert(msg);
+          const accept = await confirmCustom(msg);
+          if (!accept) return;
         }
       }
       try {
