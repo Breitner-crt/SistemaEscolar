@@ -118,12 +118,12 @@ function doPost(e) {
     const role = String(auth.r || "").toLowerCase();
 
     const ADMIN_ONLY = [
-      "save_student", "save_grado", "save_seccion", "save_materia", "save_actividad",
+      "save_student", "save_grado", "save_seccion", "save_materia",
       "save_bimestre", "save_user", "save_parent_user", "save_assignments",
       "delete_student", "delete_grados", "delete_secciones", "delete_materias",
       "delete_activities", "migrate_student_labels"
     ];
-    const STAFF = ["save_grades", "save_exams", "save_attendance"];
+    const STAFF = ["save_grades", "save_exams", "save_attendance", "save_actividad"];
 
     if (ADMIN_ONLY.indexOf(action) > -1 && role !== "admin") {
       return jsonResponse({ success: false, code: "AUTH", error: "No autorizado para esta acción" });
