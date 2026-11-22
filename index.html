@@ -180,6 +180,19 @@
     }
     .in::placeholder { color: var(--text-dim); }
 
+    .date-field { position: relative; display: flex; align-items: center; }
+    .date-field .date-input { padding-right: 42px; }
+    .date-field .date-btn {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      border: 0; background: transparent; cursor: pointer; font-size: 16px;
+      line-height: 1; padding: 4px; color: var(--text-muted);
+    }
+    .date-field .date-btn:hover { color: var(--primary); }
+    .date-field .date-native {
+      position: absolute; right: 0; bottom: 0; width: 1px; height: 1px;
+      opacity: 0; pointer-events: none;
+    }
+
     .btn {
       border: none;
       border-radius: var(--radius-sm);
@@ -1067,6 +1080,8 @@ function pretty(k) {
   if (/^start$/i.test(s.trim())) return "Inicio";
   if (/^end$/i.test(s.trim())) return "Fin";
   if (/^active$/i.test(s.trim())) return "Activo";
+  if (/^due\s*date$/i.test(s.trim())) return "Fecha de entrega";
+  if (/^assign\s*date$/i.test(s.trim())) return "Fecha de asignación";
   if (/^(childrenids|hijos|children|estudiantesids)$/i.test(s.replace(/\s+/g, ""))) return "Hijos";
   return s.replace(/\b\w/g, c => c.toUpperCase()).trim();
 }
@@ -1108,6 +1123,14 @@ function isoDate(v) {
   return "";
 }
 
+function isValidISODate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!m) return false;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+}
+
 function bimestreRange(b) {
   if (!b) return null;
   const start = isoDate(ciGet(b, ["start", "fechaInicio", "inicio", "fecha_inicio"]));
@@ -1124,7 +1147,7 @@ function activityOutOfRange(act) {
   const b = (DB.bimestres || []).find(x => String(x.id).trim().toLowerCase() === bKey || String(labelOf(x)).trim().toLowerCase() === bKey);
   const r = bimestreRange(b);
   if (!r) return null;
-  const f = isoDate(ciGet(act, ["fecha", "date", "fechaActividad"]));
+  const f = isoDate(ciGet(act, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"]));
   if (!f) return null;
   if (f >= r.start && f <= r.end) return null;
   return { fecha: f, start: r.start, end: r.end, bimestre: labelOf(b) || String(bId) };
@@ -2238,9 +2261,10 @@ function activityRowHtml(a, editable, idx) {
   const nombre = esc(a.nombre || a.name || a.titulo || "Actividad");
   const desc = esc(a.descripcion || a.description || "");
   const bLabel = relLabel("bimestre", relGet(a, "bimestre"));
-  const fecha = datePart(a.fecha !== undefined ? a.fecha : (a.date || a.fechaInicio || ""));
+  const fecha = datePart(ciGet(a, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"]));
   const late = activityOutOfRange(a);
-  const pts = a.puntajeMax !== undefined && a.puntajeMax !== "" ? a.puntajeMax : (a.puntaje || a.puntos || "");
+  const ptsRaw = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
+  const pts = ptsRaw === undefined || ptsRaw === null ? "" : ptsRaw;
   const alt = (idx % 2 === 1) ? " alt" : "";
   return `
     <div class="acc-act-row${alt}">
@@ -2268,15 +2292,18 @@ function buildActivitiesFlatTable() {
   const list = (DB.activities || []).slice();
   if (teacherScoped()) list = list.filter(r => inScope("grado", relGet(r, "grado")));
   const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Fecha", "Puntaje Máx."];
-  const rows = list.map(a => [
-    a.nombre || a.name || a.titulo || "",
-    a.descripcion || a.description || "",
-    relLabel("grado", relGet(a, "grado")) || "",
-    relLabel("materia", relGet(a, "materia")) || "",
-    relLabel("bimestre", relGet(a, "bimestre")) || "",
-    datePart(a.fecha || a.date || ""),
-    a.puntajeMax !== undefined && a.puntajeMax !== "" ? a.puntajeMax : (a.puntaje || a.puntos || "")
-  ]);
+  const rows = list.map(a => {
+    const pts = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
+    return [
+      a.nombre || a.name || a.titulo || "",
+      a.descripcion || a.description || "",
+      relLabel("grado", relGet(a, "grado")) || "",
+      relLabel("materia", relGet(a, "materia")) || "",
+      relLabel("bimestre", relGet(a, "bimestre")) || "",
+      datePart(ciGet(a, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"])),
+      pts === undefined || pts === null ? "" : pts
+    ];
+  });
   const t = $("#actFlatExport");
   t.innerHTML =
     "<thead><tr>" + headers.map(h => "<th>" + esc(h) + "</th>").join("") + "</tr></thead>" +
@@ -2406,8 +2433,13 @@ function fieldHtml(h, val, key) {
       '<option value="false"' + (!on ? ' selected' : '') + '>No</option>' +
       '</select>';
   } else if (/fecha|date|nacimiento|inicio|fin|start|end/i.test(kl)) {
-    inner = '<input class="in" type="date" name="' + name + '" value="' + esc(datePart(v)) + '">';
-  } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|telefono|fono|codigo|puntajemax/i.test(kl)) {
+    const iso = isoDate(v) || datePart(v);
+    inner = '<div class="date-field">' +
+      '<input class="in date-input" type="text" name="' + name + '" value="' + esc(fmtDate(iso)) + '" placeholder="dd/mm/yyyy" autocomplete="off" inputmode="numeric" maxlength="10" data-date-input="1">' +
+      '<button type="button" class="date-btn" tabindex="-1" aria-label="Elegir fecha">📅</button>' +
+      '<input type="date" class="date-native" tabindex="-1" aria-hidden="true" value="' + esc(iso) + '">' +
+      '</div>';
+  } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|points|telefono|fono|codigo|puntajemax/i.test(kl)) {
     inner = '<input class="in" type="number" step="any" name="' + name + '" value="' + esc(v) + '">';
   } else if (/observ|descripcion|detalle|direccion|comentario/i.test(kl)) {
     inner = '<textarea class="in" name="' + name + '" rows="3">' + esc(v) + '</textarea>';
@@ -2497,6 +2529,39 @@ function syncMateriaOptions(gSel, mSel) {
   mSel.innerHTML = html;
 }
 
+function setupDateFields(ov) {
+  ov.querySelectorAll(".date-field").forEach(box => {
+    const text = box.querySelector("[data-date-input]");
+    const native = box.querySelector(".date-native");
+    const btn = box.querySelector(".date-btn");
+    if (!text || !native) return;
+
+    const syncNative = () => { native.value = isoDate(text.value) || ""; };
+
+    text.addEventListener("input", () => {
+      const d = text.value.replace(/\D/g, "").slice(0, 8);
+      if (d.length > 4) text.value = d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
+      else if (d.length > 2) text.value = d.slice(0, 2) + "/" + d.slice(2);
+      else text.value = d;
+      syncNative();
+    });
+    text.addEventListener("blur", () => {
+      const iso = isoDate(text.value);
+      if (iso) text.value = fmtDate(iso);
+    });
+    native.addEventListener("change", () => {
+      if (native.value) text.value = fmtDate(native.value);
+    });
+    if (btn) btn.addEventListener("click", () => {
+      syncNative();
+      if (typeof native.showPicker === "function") {
+        try { native.showPicker(); return; } catch (e) { }
+      }
+      native.click();
+    });
+  });
+}
+
 function setupActivityCascade(ov) {
   const form = ov.querySelector("#recForm");
   if (!form) return;
@@ -2514,9 +2579,10 @@ function setupActivityCascade(ov) {
     const label = bSel.closest("label");
     if (label) label.appendChild(hint);
     const paint = () => {
-      const b = (DB.bimestres || []).find(x => String(x.id) === String(bSel.value));
+      const key = String(bSel.value).trim().toLowerCase();
+      const b = (DB.bimestres || []).find(x => String(x.id).trim().toLowerCase() === key || String(labelOf(x)).trim().toLowerCase() === key);
       const r = bimestreRange(b);
-      hint.textContent = r ? "Rango del bimestre: " + fmtDate(r.start) + " – " + fmtDate(r.end) : "";
+      hint.textContent = "Rango del bimestre: " + (r ? fmtDate(r.start) + " – " + fmtDate(r.end) : "—");
     };
     bSel.addEventListener("change", paint);
     paint();
@@ -2533,9 +2599,10 @@ function openRecordModal(key, record, after) {
     '</div></form>';
   if (isNew) body = body.replace('<form id="recForm">', '<form id="recForm"><input type="hidden" name="id" value="' + uid() + '">');
   const foot = '<button class="btn ghost" type="button" data-cancel>Cancelar</button> <button class="btn primary" type="button" data-save>Guardar</button>';
-  const entLabel = key === "padres" ? "Tutor" : (key === "users" ? "Usuario" : pretty(key));
+  const entLabel = key === "padres" ? "Tutor" : (key === "users" ? "Usuario" : (key === "activities" ? "Actividad" : pretty(key)));
   
   openModal((isNew ? "Nuevo " : "Editar ") + entLabel, body, foot, ov => {
+    setupDateFields(ov);
     if (key === "activities") setupActivityCascade(ov);
     ov.querySelector("[data-cancel]").addEventListener("click", () => ov.remove());
     ov.querySelector("[data-save]").addEventListener("click", async () => {
@@ -2550,6 +2617,18 @@ function openRecordModal(key, record, after) {
       if (childBoxes.length) {
         const cname = childBoxes[0].name;
         out[cname] = Array.from(childBoxes).filter(b => b.checked).map(b => b.value).join(",");
+      }
+      let badDate = "";
+      form.querySelectorAll("[data-date-input]").forEach(el => {
+        const raw = String(el.value || "").trim();
+        if (!raw) { out[el.name] = ""; return; }
+        const iso = isoDate(raw);
+        if (!iso || !isValidISODate(iso)) { badDate = el.name; return; }
+        out[el.name] = iso;
+      });
+      if (badDate) {
+        toast("Fecha inválida en " + pretty(badDate) + ". Usa el formato dd/mm/yyyy", "err");
+        return;
       }
       if (!out.id) out.id = uid();
       if (isNew && (key === "users" || key === "padres")) {
