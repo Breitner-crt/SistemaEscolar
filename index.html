@@ -2646,8 +2646,8 @@ function openRecordModal(key, record, after) {
         if (issue) {
           const msg = "La fecha " + fmtDate(issue.fecha) + " está fuera del rango del " + issue.bimestre +
             " (" + fmtDate(issue.start) + " – " + fmtDate(issue.end) + ").\n\n" +
-            "¿Deseas registrarla de todos modos como actividad extemporánea?";
-          if (!confirm(msg)) return;
+            "Se registrará como actividad extemporánea.";
+          alert(msg);
         }
       }
       try {
