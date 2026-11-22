@@ -1131,10 +1131,10 @@ function isValidISODate(iso) {
   return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
 }
 
-function bimestreRange(b) {
+function bimestreDateRange(b) {
   if (!b) return null;
-  const start = isoDate(ciGet(b, ["start", "fechaInicio", "inicio", "fecha_inicio"]));
-  const end = isoDate(ciGet(b, ["end", "fechaFin", "fin", "fecha_fin"]));
+  const start = isoDate(ciGet(b, ["start", "inicio", "fechaInicio", "fecha inicio", "fecha_inicio", "startDate", "desde"]));
+  const end = isoDate(ciGet(b, ["end", "fin", "fechaFin", "fecha fin", "fecha_fin", "endDate", "hasta"]));
   if (!start || !end) return null;
   return { start, end };
 }
@@ -1145,7 +1145,7 @@ function activityOutOfRange(act) {
   if (bId === undefined || bId === null || String(bId).trim() === "") return null;
   const bKey = String(bId).trim().toLowerCase();
   const b = (DB.bimestres || []).find(x => String(x.id).trim().toLowerCase() === bKey || String(labelOf(x)).trim().toLowerCase() === bKey);
-  const r = bimestreRange(b);
+  const r = bimestreDateRange(b);
   if (!r) return null;
   const f = isoDate(ciGet(act, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"]));
   if (!f) return null;
@@ -2581,7 +2581,7 @@ function setupActivityCascade(ov) {
     const paint = () => {
       const key = String(bSel.value).trim().toLowerCase();
       const b = (DB.bimestres || []).find(x => String(x.id).trim().toLowerCase() === key || String(labelOf(x)).trim().toLowerCase() === key);
-      const r = bimestreRange(b);
+      const r = bimestreDateRange(b);
       hint.textContent = "Rango del bimestre: " + (r ? fmtDate(r.start) + " – " + fmtDate(r.end) : "—");
     };
     bSel.addEventListener("change", paint);
