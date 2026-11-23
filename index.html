@@ -43,7 +43,7 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; -webkit-font-smoothing: antialiased; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; -webkit-font-smoothing: antialiased; overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     
     [hidden] { display: none !important; }
 
@@ -712,6 +712,10 @@
       .att-mobile-chk-group input { margin-right: 8px; }
       .att-table-wrap:has(#batchTable) { display: none; }
       .mobile-att-list { display: block !important; }
+
+      /* Evitar el zoom automático del navegador al enfocar un campo (iOS/Android exige >= 16px) */
+      input, select, textarea, .in { font-size: 16px !important; }
+      button, .btn, a, label, input, select, textarea { touch-action: manipulation; }
     }
     .mobile-matrix-list { display: none; }
     .mobile-att-list { display: none; }
