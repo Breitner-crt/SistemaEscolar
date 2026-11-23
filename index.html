@@ -5249,13 +5249,25 @@ function showCycleCreationModal() {
 }
 
 function addCreateCycleButtonToDashboard() {
-  if (USER.rol !== "admin" || VIEW !== "dashboard") return;
+  if (!USER || USER.rol !== "admin" || VIEW !== "dashboard") return;
   const c = $("#content");
-  if ($("#dashboardCreateCycleBtn").length) return;
+  if (!c) return;
+  if ($("#dashboardCreateCycleBtn")) return;
   
-  var btn = $('<button id="dashboardCreateCycleBtn" class="btn primary" style="margin:20px; padding:10px 20px;">🔄 Crear Nuevo Ciclo</button>');
-  $(c).find(".page-head").after(btn);
-  btn.on("click", showCycleCreationModal);
+  const btn = document.createElement("button");
+  btn.id = "dashboardCreateCycleBtn";
+  btn.className = "btn primary";
+  btn.style.cssText = "margin:20px; padding:10px 20px;";
+  btn.innerHTML = "🔄 Crear Nuevo Ciclo";
+  
+  const pageHead = c.querySelector(".page-head");
+  if (pageHead) {
+    pageHead.parentNode.insertBefore(btn, pageHead.nextSibling);
+  } else {
+    c.prepend(btn);
+  }
+  
+  btn.addEventListener("click", showCycleCreationModal);
 }
 
 
