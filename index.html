@@ -2982,13 +2982,15 @@ function updateAttSummary() {
   const box = $("#attSummary");
   if (!box) return;
   const counts = { present: 0, absent: 0, late: 0, justified: 0, none: 0 };
-  $$("#batchTable tbody tr").forEach(row => {
+  const seen = {};
+  const rows = $$("#batchTable tbody tr, .att-card-mobile").filter(el => el.offsetParent !== null);
+  rows.forEach(row => {
+    const sid = row.getAttribute("data-att-row") || "";
+    if (sid) {
+      if (seen[sid]) return;
+      seen[sid] = true;
+    }
     const chk = row.querySelector(".att-chk:checked");
-    if (chk) counts[chk.dataset.state] = (counts[chk.dataset.state] || 0) + 1;
-    else counts.none++;
-  });
-  $$(".att-card-mobile").forEach(card => {
-    const chk = card.querySelector(".att-chk:checked");
     if (chk) counts[chk.dataset.state] = (counts[chk.dataset.state] || 0) + 1;
     else counts.none++;
   });
@@ -4703,8 +4705,13 @@ async function saveAttendance(st) {
   const items = [];
   students.forEach(s => {
     const sid = String(s.id);
-    const row = document.querySelector('[data-att-row="' + sid + '"]');
-    if (!row) return;
+    const nodes = Array.from(document.querySelectorAll('[data-att-row="' + sid + '"]'));
+    if (!nodes.length) return;
+    // En móvil existen la fila de tabla (oculta) y la tarjeta (visible) con el mismo data-att-row.
+    // Usar la que está visible para no leer los checkboxes de la versión oculta.
+    const visible = nodes.filter(n => n.offsetParent !== null);
+    const pool = visible.length ? visible : nodes;
+    const row = pool.find(n => n.querySelector(".att-chk:checked")) || pool[0];
     const chk = row.querySelector(".att-chk:checked");
     const status = chk ? chk.dataset.state : "";
     const cmtEl = row.querySelector("[data-att-comment]");
