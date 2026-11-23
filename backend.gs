@@ -50,7 +50,7 @@ function cacheDropSheet(sheetName) {
 function cacheDropAll() {
   cacheDrop(CACHE_KEY);
   ["Estudiantes", "Grados", "Secciones", "Actividades", "Examenes", "Asistencia",
-   "Notas", "Bimestres", "Materias", "Usuarios", "UsuariosPP", "PadresHijos", "AsignacionesDocentes"]
+   "Notas", "Bimestres", "Materias", "Usuarios", "UsuariosPP", "PadresHijos", "AsignacionesDocentes", "Ciclos"]
     .forEach(function (n) { cacheDropSheet(n); });
 }
 
@@ -84,6 +84,7 @@ function doGet(e) {
         users: getSheetDataCached("Usuarios"),
         padres: getSheetDataCached("UsuariosPP"),
         padres_hijos: getSheetDataCached("PadresHijos"),
+        ciclos: getSheetDataCached("Ciclos"),
         teacher_assignments: getSheetDataCached("AsignacionesDocentes")
       };
 

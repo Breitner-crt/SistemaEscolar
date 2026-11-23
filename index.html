@@ -999,7 +999,8 @@ const state = {
   },
   assign: { userId: "" },
   boletas: { bimestre: "", grado: "", seccion: "", examenMax: storedExamMax() || 40 },
-  attReport: { desde: "", hasta: "", grado: "", seccion: "", q: "", detalle: false }
+  attReport: { desde: "", hasta: "", grado: "", seccion: "", q: "", detalle: false },
+  cicloEscolarId: ""  // nuevo: ID del ciclo activo (ej. "2023-2024")
 };
 
 const ALL_BIMESTRES = "__all__";
@@ -1367,6 +1368,9 @@ async function loadData() {
     throw new Error(r.error);
   }
   DB = r || {};
+  // Extraer ciclos de la BD y guardar el primero como activo por defecto
+  const dbCycles = DB.ciclos || [];
+  state.cicloEscolarId = dbCycles.length ? String(dbCycles[0].id) : "";
 }
 
 async function reload() {
