@@ -1753,7 +1753,10 @@ function go(view) {
 
 function renderView() {
   const c = $("#content");
-  if (VIEW === "dashboard") renderDashboard(c);
+  if (VIEW === "dashboard") {
+    renderDashboard(c);
+    addCreateCycleButtonToDashboard();
+  }
   else if (VIEW === "students") renderStudents(c);
   else if (VIEW === "assignments") renderAssignments(c);
   else if (VIEW === "grades") renderMatrixGrades(c);
@@ -5170,7 +5173,91 @@ function bindGlobal() {
 
   $("#btnConn").addEventListener("click", openConnModal);
   $("#btnHome").addEventListener("click", () => go("dashboard"));
+  addCreateCycleButtonToDashboard();
 }
+
+/**
+ * Muestra un modal para crear un nuevo ciclo escolar.
+ */
+function showCycleCreationModal() {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" style="max-width:400px;">
+      <div class="mh">
+        <h3>Crear Nuevo Ciclo Escolar</h3>
+        <button class="x" type="button" data-close>&times;</button>
+      </div>
+      <div class="mc">
+        <form id="cycleForm">
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-size:13px;">Nombre del ciclo <span style="color:#d33;">*</span></label>
+            <input type="text" id="cycleNombre" class="in" placeholder="Ej: 2027" style="width:100%; padding:6px; font-size:13px;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-size:13px;">Fecha de Inicio <span style="color:#d33;">(opcional)</span></label>
+            <input type="date" id="cycleInicio" class="in" style="width:100%; padding:6px; font-size:13px;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-size:13px;">Fecha de Fin <span style="color:#d33;">(opcional)</span></label>
+            <input type="date" id="cycleFin" class="in" style="width:100%; padding:6px; font-size:13px;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-size:13px;">Activo <span style="color:#d33;">(por defecto TRUE)</span></label>
+            <input type="checkbox" id="cycleActivo" class="in" checked style="width:auto; margin-right:4px; vertical-align:middle;">
+          </div>
+        </form>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" data-cancel>No</button>
+        <button class="btn primary" data-accept>Crear Ciclo</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  
+  const btnCancel = ov.querySelector("[data-cancel]");
+  const btnAccept = ov.querySelector("[data-accept]");
+  const closeBtn = ov.querySelector("[data-close]");
+  
+  function cleanup() { ov.remove(); }
+  
+  btnAccept.addEventListener("click", async () => {
+    const nombre = ov.querySelector("#cycleNombre").value.trim();
+    if (!nombre) { toast("Nombre obligatorio", "err"); return; }
+    
+    setLoading(true, "Guardando ciclo...");
+    try {
+      const r = await apiPost({
+        action: "save_cycle", token: USER.token, 
+        payload: { nombre, fechaInicio: ov.querySelector("#cycleInicio").value, fechaFin: ov.querySelector("#cycleFin").value, activo: ov.querySelector("#cycleActivo").checked }
+      });
+      setLoading(false);
+      if (r && r.success) {
+        toast("Ciclo creado: " + r.nombre, "ok");
+        await loadData();
+        renderView();
+        cleanup();
+      } else {
+        toast("Error: " + (r.error || "Desconocido"), "err");
+      }
+    } catch (e) { setLoading(false); toast("Error: " + e.message, "err"); }
+  });
+  
+  btnCancel.addEventListener("click", cleanup);
+  closeBtn.addEventListener("click", cleanup);
+}
+
+function addCreateCycleButtonToDashboard() {
+  if (USER.rol !== "admin" || VIEW !== "dashboard") return;
+  const c = $("#content");
+  if ($("#dashboardCreateCycleBtn").length) return;
+  
+  var btn = $('<button id="dashboardCreateCycleBtn" class="btn primary" style="margin:20px; padding:10px 20px;">🔄 Crear Nuevo Ciclo</button>');
+  $(c).find(".page-head").after(btn);
+  btn.on("click", showCycleCreationModal);
+}
+
 
 function init() {
   // Forzar siempre el uso del Proxy de Vercel para mayor seguridad y profesionalismo
