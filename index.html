@@ -4095,8 +4095,10 @@ function computeBoletaAnnual(student, o, gradeIdx, examsByStudent) {
       };
     });
     const withData = perB.filter(x => x.total !== null);
-    const accTotal = withData.length ? round1(withData.reduce((s, x) => s + x.total, 0)) : null;
-    const accMax = withData.length ? round1(withData.reduce((s, x) => s + x.totalMax, 0)) : null;
+    const nBims = bims.length || 1;
+    // Acumulado = suma de los bimestres / cantidad de bimestres (promedio)
+    const accTotal = withData.length ? round1(withData.reduce((s, x) => s + x.total, 0) / nBims) : null;
+    const accMax = withData.length ? round1(withData.reduce((s, x) => s + x.totalMax, 0) / nBims) : null;
     return {
       materia: labelOf(m), mId: m.id, perB,
       accTotal, accMax, bimsConNota: withData.length
@@ -4196,7 +4198,7 @@ function boletaAnnualHtml(item, o) {
 
   return '<div class="boleta-doc">' +
     '<div class="b-title">' +
-      '<div><h2>Boleta Anual de Calificaciones</h2><div class="b-sub">Acumulado de bimestres · Sistema Escolar</div></div>' +
+      '<div><h2>Boleta Anual de Calificaciones</h2><div class="b-sub">Promedio de bimestres · Sistema Escolar</div></div>' +
       '<div class="b-period"><b>Acumulado anual</b><br>' + rangeLbl + '<br>Emitida: ' + esc(today()) + '</div>' +
     '</div>' +
     '<div class="b-student"><b>' + esc(labelOf(s)) + '</b><br>' +
@@ -4210,7 +4212,7 @@ function boletaAnnualHtml(item, o) {
     '</table>' +
     '<div class="b-legend">' +
       'Cada bimestre muestra los <b>puntos obtenidos</b> (zona acumulada + examen). ' +
-      'El <b>acumulado</b> es la <b>suma de los bimestres</b>, no un promedio. ' +
+      'El <b>acumulado</b> es el <b>promedio de los ' + bims.length + ' bimestres</b>: suma de los bimestres ÷ ' + bims.length + '. ' +
       'Examen calificado sobre ' + fmtNum(item.examMax) + '.<br>' +
       'Asistencia del período: ' + esc(attLine) + '.' +
     '</div>' +
@@ -4323,7 +4325,7 @@ function renderBoletas(c) {
     const bims = sortedBimestres();
     flatHead = ["Estudiante", "Grado", "Sección", "Materia"]
       .concat(bims.map(b => labelOf(b)))
-      .concat(["Acumulado (pts)", "Acumulado máximo"]);
+      .concat(["Acumulado (prom.)", "Acumulado máximo (prom.)"]);
     data.forEach(d => {
       const s = d.student;
       const gLbl = relLabel("grado", d.gId) || d.gId || "";
@@ -4360,7 +4362,7 @@ function renderBoletas(c) {
   c.innerHTML =
     '<div class="page-head">' +
       '<div><h1>Boletas de Calificaciones</h1><p>' + (annual
-        ? 'Acumulado anual por materia: suma de los bimestres en puntos, con la asistencia del año'
+        ? 'Promedio anual por materia: suma de los bimestres ÷ cantidad de bimestres, con la asistencia del año'
         : 'Total por materia = zona acumulada + examen, en puntos; con la asistencia del bimestre') + '</p></div>' +
       '<div class="head-actions">' +
         '<button class="btn success sm" id="bolExport" type="button">📊 Exportar Excel</button>' +
@@ -4386,8 +4388,8 @@ function renderBoletas(c) {
     '</div>' +
     '<div class="card">' + rowsHtml + '</div>' +
     '<div class="rep-note">' + (annual
-      ? 'El <b>acumulado</b> es la <b>suma de todos los bimestres</b>, no un promedio: por ejemplo, 42 pts en B1 + 43 pts en B2 = <b>85 pts</b>. ' +
-        'Cada bimestre muestra <b>puntos obtenidos / máximo posible</b>; el máximo acumulado solo cuenta los bimestres con nota. ' +
+      ? 'El <b>acumulado</b> es el <b>promedio de los ' + (sortedBimestres().length || 1) + ' bimestres</b> (suma de los bimestres ÷ ' + (sortedBimestres().length || 1) + '): por ejemplo, 42 + 43 + 40 + 45 = 170 ÷ 4 = <b>42.5 pts</b>. ' +
+        'Cada bimestre muestra los <b>puntos obtenidos</b>; un bimestre sin notas cuenta como 0 en el promedio. ' +
         'Si una materia no tiene notas en ningún bimestre se muestra "—".'
       : 'La <b>zona</b> es la <b>suma acumulada</b> de las notas de las actividades del bimestre (puntos obtenidos sobre el total posible). ' +
         'El <b>total</b> de cada materia es <b>Zona + Examen</b>, en puntos crudos: por ejemplo, 30 de zona + 30 de examen = <b>60 pts</b>. ' +
