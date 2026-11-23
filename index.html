@@ -179,6 +179,7 @@
       background: #ffffff;
     }
     .in::placeholder { color: var(--text-dim); }
+    .in.in-error, td .in.in-error { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important; background: #fff5f5 !important; }
 
     .date-field { position: relative; display: flex; align-items: center; }
     .date-field .date-input { padding-right: 42px; }
@@ -868,6 +869,7 @@ const DEFAULT_API_URL = "/api/proxy";
 const LS_URL = "escolar_api_url";
 const LS_SESSION = "escolar_session";
 const LS_TOKEN = "escolar_token";
+const LS_EXAM_MAX = "escolar_exam_max";
 
 const FALLBACK_HEADERS = {
   students: ["id","nombre","gradoId","seccionId","dni","fechaNacimiento","sexo","direccion","telefono","padreId"],
@@ -996,7 +998,7 @@ const state = {
     alumno: ""
   },
   assign: { userId: "" },
-  boletas: { bimestre: "", grado: "", seccion: "", examenMax: 40 },
+  boletas: { bimestre: "", grado: "", seccion: "", examenMax: storedExamMax() || 40 },
   attReport: { desde: "", hasta: "", grado: "", seccion: "", q: "", detalle: false }
 };
 
@@ -1044,6 +1046,26 @@ function fmtNum(n) {
   if (v === null) return "—";
   const r = round1(v);
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+function storedExamMax() {
+  try {
+    const v = numOrNull(localStorage.getItem(LS_EXAM_MAX));
+    return v === null || v <= 0 ? null : v;
+  } catch (e) { return null; }
+}
+
+function examMaxValue() {
+  const v = numOrNull(state && state.boletas ? state.boletas.examenMax : null);
+  return v === null || v <= 0 ? 40 : v;
+}
+
+function setExamMax(v) {
+  const n = numOrNull(v);
+  const val = n === null || n <= 0 ? 40 : n;
+  if (state && state.boletas) state.boletas.examenMax = val;
+  try { localStorage.setItem(LS_EXAM_MAX, String(val)); } catch (e) { }
+  return val;
 }
 
 const $ = s => document.querySelector(s);
@@ -1695,7 +1717,7 @@ function resetState() {
   };
   state.assign = { userId: "", rows: undefined, forUser: undefined };
   state.matrixGrades = { bimestre: "", grado: "", seccion: "", materia: "", q: "", alumno: "" };
-  state.boletas = { bimestre: "", grado: "", seccion: "", examenMax: 40 };
+  state.boletas = { bimestre: "", grado: "", seccion: "", examenMax: storedExamMax() || 40 };
   state.attReport = { desde: "", hasta: "", grado: "", seccion: "", q: "", detalle: false };
 }
 
@@ -2882,7 +2904,10 @@ function cellHtml(vk, col, student, existing, editable) {
     return '<select class="in"' + common + dis + '><option value="">—</option>' +
       opts.map(o => '<option value="' + esc(o) + '"' + (String(val) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join("") + '</select>';
   }
-  if (col.type === "number") return '<input class="in" type="number" step="any"' + common + dis + ' value="' + esc(val) + '">';
+  if (col.type === "number") {
+    const lim = vk === "exams" ? ' min="0" max="' + esc(examMaxValue()) + '"' : "";
+    return '<input class="in" type="number" step="any"' + lim + common + dis + ' value="' + esc(val) + '">';
+  }
   if (col.type === "date") return '<input class="in" type="date"' + common + dis + ' value="' + esc(datePart(val)) + '">';
   return '<input class="in"' + common + dis + ' value="' + esc(val) + '">';
 }
@@ -3060,6 +3085,9 @@ function renderBatch(c, vk) {
       controls += '<label class="ctl"><span>' + esc(ct.label) + '</span><select class="in" data-ctl="' + ct.k + '">' + optionsHtml(ct.db, st[ct.k], ph, fG) + '</select></label>';
     }
   });
+  if (vk === "exams") {
+    controls += '<label class="ctl" style="flex:0 1 170px"><span>Examen sobre</span><input class="in" id="examsMax" type="number" min="1" step="1" value="' + esc(examMaxValue()) + '"></label>';
+  }
   controls += '</div>';
 
   let body;
@@ -3098,7 +3126,9 @@ function renderBatch(c, vk) {
         (editable && !missing.length && anyOptions ?
           '<button class="btn primary" id="bSave" type="button">💾 Guardar Cambios</button>' : "") +
       '</div>' +
-    '</div>' + controls + body +
+    '</div>' + controls +
+    (vk === "exams" ? '<div class="hint" id="examsMaxHint" style="margin:-4px 0 14px">📝 Las notas de examen se validan entre 0 y ' + fmtNum(examMaxValue()) + ' pts.</div>' : "") +
+    body +
     (!editable ? '<div class="hint" style="margin-top:14px">🔒 Tu usuario tiene acceso de sólo lectura en esta sección.</div>' : "");
 
   c.querySelectorAll("[data-ctl]").forEach(el => {
@@ -3108,6 +3138,16 @@ function renderBatch(c, vk) {
       if (vk === "grades" && k === "activity") autoFromActivity(st);
       renderView();
     });
+  });
+
+  const exMaxEl = $("#examsMax");
+  if (exMaxEl) exMaxEl.addEventListener("change", e => {
+    const val = setExamMax(e.target.value);
+    e.target.value = val;
+    $$('#batchTable input[type="number"][data-stud]').forEach(inp => inp.setAttribute("max", String(val)));
+    const hintEl = $("#examsMaxHint");
+    if (hintEl) hintEl.textContent = "📝 Las notas de examen se validan entre 0 y " + fmtNum(val) + " pts.";
+    toast("Nota máxima de examen: " + fmtNum(val) + " pts", "ok");
   });
 
   const bExport = $("#bExport");
@@ -4261,8 +4301,7 @@ function renderBoletas(c) {
     if (ss && ss.length) st.seccion = String(ss[0]);
   }
 
-  let examenMax = numOrNull(st.examenMax);
-  if (examenMax === null || examenMax <= 0) examenMax = 40;
+  const examenMax = examMaxValue();
 
   const annual = st.bimestre === ALL_BIMESTRES;
   const opts = { bimestre: st.bimestre, grado: st.grado, examenMax };
@@ -4400,8 +4439,7 @@ function renderBoletas(c) {
   $("#bGrado").addEventListener("change", e => { st.grado = e.target.value; st.seccion = ""; renderView(); });
   $("#bSeccion").addEventListener("change", e => { st.seccion = e.target.value; renderView(); });
   $("#bExamMax").addEventListener("change", e => {
-    const v = numOrNull(e.target.value);
-    st.examenMax = v === null || v <= 0 ? 40 : v;
+    setExamMax(e.target.value);
     renderView();
   });
 
@@ -4644,10 +4682,39 @@ function renderAttReport(c) {
   });
 }
 
+function validateExamScores() {
+  const max = examMaxValue();
+  const bad = [];
+  $$('#batchTable input[type="number"][data-stud]').forEach(el => {
+    const raw = el.value;
+    if (raw === undefined || raw === null || String(raw).trim() === "") {
+      el.classList.remove("in-error");
+      return;
+    }
+    const n = numOrNull(raw);
+    if (n === null || n < 0 || n > max) {
+      el.classList.add("in-error");
+      const sid = el.dataset.stud;
+      const stu = (DB.students || []).find(x => String(x.id) === String(sid));
+      bad.push((stu ? labelOf(stu) : sid) + " (" + raw + ")");
+    } else {
+      el.classList.remove("in-error");
+    }
+  });
+  return bad;
+}
+
 async function saveBatch(vk) {
   const cfg = BATCH[vk];
   const st = state.batch[vk];
   if (vk === "attendance") return saveAttendance(st);
+  if (vk === "exams") {
+    const bad = validateExamScores();
+    if (bad.length) {
+      toast("Nota fuera de rango: debe estar entre 0 y " + fmtNum(examMaxValue()) + " pts. Revisa: " + bad.slice(0, 5).join(", "), "err");
+      return;
+    }
+  }
   const cols = batchColumns(vk);
   const students = batchStudents(vk);
   const vals = {};
