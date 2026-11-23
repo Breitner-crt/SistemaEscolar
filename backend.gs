@@ -122,7 +122,7 @@ function doPost(e) {
       "save_student", "save_grado", "save_seccion", "save_materia",
       "save_bimestre", "save_user", "save_parent_user", "save_assignments",
       "delete_student", "delete_grados", "delete_secciones", "delete_materias",
-      "delete_activities", "migrate_student_labels"
+      "delete_activities", "migrate_student_labels", "save_cycle"
     ];
     const STAFF = ["save_grades", "save_exams", "save_attendance", "save_actividad"];
 
@@ -172,6 +172,9 @@ function doPost(e) {
         break;
       case "save_attendance":
         out = saveAttendance(data.payload);
+        break;
+      case "save_cycle":
+        out = saveCycle(data.payload);
         break;
 
       case "delete_student":
@@ -1124,6 +1127,47 @@ function saveAttendance(payload) {
 
   cacheDropSheet("Asistencia");
   return jsonResponse({ success: true, updated: updated, inserted: inserted });
+}
+
+/**
+ * Guarda un nuevo ciclo escolar en la hoja "Ciclos".
+ * Payload esperado: { nombre, fechaInicio, fechaFin, activo }
+ * El ID se genera automáticamente como el siguiente número disponible
+ * (basado en el último ciclo existente, o 2024 por defecto).
+ */
+function saveCycle(payload) {
+  var sheet = ss.getSheetByName("Ciclos");
+  if (!sheet) {
+    sheet = ss.getActiveSpreadsheet().insertSheet("Ciclos");
+    sheet.getRange(1, 1, 1, 5).setValues([["id", "nombre", "fechaInicio", "fechaFin", "activo"]]);
+  }
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  
+  // Generar siguiente ID
+  var existingIds = [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    data.forEach(function (row) {
+      var num = Number(String(row[0]).replace(/[^0-9]/g, ""));
+      if (!isNaN(num)) existingIds.push(num);
+    });
+  }
+  var nextId = existingIds.length > 0 ? Math.max.apply(Math, existingIds) + 1 : 2024;
+  
+  var nombre = payload.nombre || "Ciclo " + nextId;
+  var fechaInicio = payload.fechaInicio || "01/02/" + nextId;
+  var fechaFin = payload.fechaFin || "30/11/" + nextId;
+  var activo = payload.activo !== undefined ? payload.activo : true;
+  
+  var newRow = [String(nextId), nombre, fechaInicio, fechaFin, String(activo).toLowerCase()];
+  sheet.appendRow(newRow);
+  
+  // Invalida el cache de ciclos
+  cacheDropSheet("Ciclos");
+  
+  return jsonResponse({ success: true, id: String(nextId), nombre: nombre });
+}
 }
 
 // ==========================================
