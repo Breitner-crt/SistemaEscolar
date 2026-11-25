@@ -254,6 +254,37 @@
     }
     .topbar h2 { font-size: 15px; font-weight: 700; flex: 1; margin: 0; }
 
+    .cycle-picker {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 700; color: var(--text-muted);
+      background: rgba(37, 99, 235, 0.06);
+      border: 1px solid rgba(37, 99, 235, 0.2);
+      border-radius: 8px; padding: 3px 8px;
+    }
+    .cycle-picker select {
+      border: 0; background: transparent; font-weight: 700;
+      color: var(--primary-hover); padding: 2px 4px; font-size: 12px;
+      max-width: 170px; cursor: pointer;
+    }
+    .cycle-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.02));
+      border: 1px solid rgba(37, 99, 235, 0.22);
+      border-radius: var(--radius-md);
+      padding: 12px 16px; margin-bottom: 14px;
+    }
+    .cycle-banner-info { display: flex; align-items: center; gap: 12px; }
+    .cycle-banner-ico {
+      width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+      background: #fff; border-radius: 10px; font-size: 19px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    }
+    .cycle-banner-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 800; }
+    .cycle-banner-name { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.2; }
+    .cycle-banner-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .cycle-banner-actions select { min-width: 150px; }
+
     .menu-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -841,6 +872,10 @@
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10"/></svg>
         Menú
       </button>
+      <label class="cycle-picker" id="cyclePicker" hidden>
+        <span>📅 Ciclo</span>
+        <select id="cycleSelect"></select>
+      </label>
       <h2 id="topTitle">Menú Principal</h2>
       <div class="userchip">
         <b id="userName">Usuario</b>
@@ -870,21 +905,23 @@ const LS_URL = "escolar_api_url";
 const LS_SESSION = "escolar_session";
 const LS_TOKEN = "escolar_token";
 const LS_EXAM_MAX = "escolar_exam_max";
+const LS_CYCLE = "escolar_ciclo_id";
 
 const FALLBACK_HEADERS = {
-  students: ["id","nombre","gradoId","seccionId","dni","fechaNacimiento","sexo","direccion","telefono","padreId"],
+  students: ["id","nombre","gradoId","seccionId","cicloId","dni","fechaNacimiento","sexo","direccion","telefono","padreId"],
   grados: ["id","nombre","descripcion"],
   secciones: ["id","nombre","gradoId"],
   materias: ["id","nombre","descripcion"],
   bimestres: ["id","nombre","start","end","active"],
-  activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax"],
+  activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax","cicloId"],
   users: ["id","usuario","contraseña","nombre","rol"],
   padres: ["id","nombre","usuario","contraseña","telefono","childrenIds"],
   padres_hijos: ["id","padreId","usuario","studentId","parentesco","activo"],
-  grades: ["id","studentId","activityId","nota"],
-  exams: ["id","studentId","materiaId","bimestreId","nota"],
-  attendance: ["id","studentId","date","status","comment"],
-  teacher_assignments: ["id","userId","gradoId","seccionId"]
+  grades: ["id","studentId","activityId","nota","cicloId"],
+  exams: ["id","studentId","materiaId","bimestreId","nota","cicloId"],
+  attendance: ["id","studentId","date","status","comment","cicloId"],
+  teacher_assignments: ["id","userId","gradoId","seccionId","cicloId"],
+  ciclos: ["id","nombre","fechaInicio","fechaFin","activo"]
 };
 
 const SAVE_ACTIONS = {
@@ -924,6 +961,7 @@ const NAV = [
   { view: "secciones", label: "Secciones", roles: ["admin"], icon: "folder" },
   { view: "materias", label: "Materias", roles: ["admin", "docente"], icon: "bookmark" },
   { view: "bimestres", label: "Bimestres", roles: ["admin"], icon: "calendar" },
+  { view: "ciclos", label: "Ciclos Escolares", roles: ["admin"], icon: "calendar" },
   { sec: "Administración", roles: ["admin"] },
   { view: "users", label: "Usuarios", roles: ["admin"], icon: "user-check" },
   { view: "padres", label: "Padres de Familia", roles: ["admin"], icon: "heart" },
@@ -945,6 +983,7 @@ const MENU_META = {
   secciones:    { ico: "🏫", d: "Secciones o aulas por grado", c: "#0d9488", bg: "rgba(13,148,136,0.1)", bd: "rgba(13,148,136,0.25)" },
   materias:     { ico: "📖", d: "Materias o asignaturas del plan de estudios", c: "#4f46e5", bg: "rgba(79,70,229,0.1)", bd: "rgba(79,70,229,0.25)" },
   bimestres:    { ico: "🗓️", d: "Períodos lectivos del año escolar", c: "#db2777", bg: "rgba(219,39,119,0.1)", bd: "rgba(219,39,119,0.25)" },
+  ciclos:       { ico: "🔄", d: "Crear, activar y administrar los ciclos escolares", c: "#0369a1", bg: "rgba(3,105,161,0.1)", bd: "rgba(3,105,161,0.25)" },
   users:        { ico: "👤", d: "Cuentas de acceso y sus roles", c: "#475569", bg: "rgba(71,85,105,0.1)", bd: "rgba(71,85,105,0.25)" },
   padres:       { ico: "❤️", d: "Padres de familia y vínculos con estudiantes", c: "#e11d48", bg: "rgba(225,29,72,0.1)", bd: "rgba(225,29,72,0.25)" },
   assignments:  { ico: "🔗", d: "Asignar grados y secciones a los docentes", c: "#ca8a04", bg: "rgba(202,138,4,0.12)", bd: "rgba(202,138,4,0.3)" }
@@ -1004,6 +1043,67 @@ const state = {
 };
 
 const ALL_BIMESTRES = "__all__";
+
+// ==========================================
+// CICLO ESCOLAR (contexto global para todos los módulos)
+// ==========================================
+function truthyFlag(v) {
+  if (v === true) return true;
+  const s = String(v === undefined || v === null ? "" : v).trim().toLowerCase();
+  return s === "true" || s === "1" || s === "si" || s === "sí" || s === "x" || s === "activo";
+}
+
+function cyclesList() {
+  return (DB.ciclos || []).slice().sort((a, b) => {
+    const na = parseInt(String(a.id).replace(/[^0-9]/g, ""), 10);
+    const nb = parseInt(String(b.id).replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function cycleName(id) {
+  const hit = (DB.ciclos || []).find(c => String(c.id) === String(id));
+  return hit ? (labelOf(hit) || String(id)) : String(id === undefined || id === null ? "" : id);
+}
+
+function defaultCycleId() {
+  const list = cyclesList();
+  if (!list.length) return "";
+  const act = list.find(c => truthyFlag(c.activo !== undefined ? c.activo : c.active));
+  return String((act || list[0]).id);
+}
+
+function activeCycleId() {
+  return String(state.cicloEscolarId || defaultCycleId() || "");
+}
+
+// Ciclo al que pertenece un registro. Si no tiene ciclo asignado se asume
+// el ciclo base (el más antiguo / activo) para no ocultar datos históricos.
+function cycleOf(rec) {
+  if (!rec) return defaultCycleId();
+  const raw = rec.cicloId !== undefined ? rec.cicloId : rec.cicloEscolarId;
+  const v = raw === undefined || raw === null ? "" : String(raw).trim();
+  return v || defaultCycleId();
+}
+
+function inActiveCycle(rec) {
+  if (!(DB.ciclos || []).length) return true;
+  const act = activeCycleId();
+  if (!act) return true;
+  return cycleOf(rec) === act;
+}
+
+function cycleScoped(list) {
+  return (list || []).filter(inActiveCycle);
+}
+
+function setActiveCycle(id) {
+  state.cicloEscolarId = String(id || "");
+  try { localStorage.setItem(LS_CYCLE, state.cicloEscolarId); } catch (e) { }
+  paintCyclePicker();
+}
+
 
 const REPORT_PRINT_CSS = [
   "*{box-sizing:border-box}",
@@ -1232,8 +1332,7 @@ function relKindOfColumn(h) {
 
 function displayValue(h, v) {
   if (v === undefined || v === null || v === "") return "";
-  if (/^(childrenids|hijos|children|estudiantesids)$/i.test(String(h).replace(/\s+/g, ""))) {
-    const ids = childIdList(v);
+  if (/^(childrenids|hijos|children|estudiantesids)$/i.test(String(h).replace(/\s+/g, ""))) {    const ids = childIdList(v);
     if (!ids.length) return "—";
     return ids.map(id => {
       const s = (DB.students || []).find(x => String(x.id) === String(id));
@@ -1241,6 +1340,11 @@ function displayValue(h, v) {
     }).join(", ");
   }
   const kind = relKindOfColumn(h);
+  if (/^ciclo/i.test(String(h))) {
+    const id = String(v).trim();
+    const hit = (DB.ciclos || []).find(c => String(c.id) === id);
+    return hit ? (labelOf(hit) || id) : id;
+  }
   if (kind) {
     const list = DB[relDb(kind)] || [];
     const id = String(v).trim();
@@ -1368,14 +1472,49 @@ async function loadData() {
     throw new Error(r.error);
   }
   DB = r || {};
-  // Extraer ciclos de la BD y guardar el primero como activo por defecto
-  const dbCycles = DB.ciclos || [];
-  state.cicloEscolarId = dbCycles.length ? String(dbCycles[0].id) : "";
+  // Ciclo escolar: respetar el seleccionado previamente; si no existe,
+  // usar el ciclo marcado como activo o el primero de la lista.
+  const list = cyclesList();
+  let saved = "";
+  try { saved = localStorage.getItem(LS_CYCLE) || ""; } catch (e) { }
+  const savedHit = saved ? list.find(c => String(c.id) === String(saved)) : null;
+  state.cicloEscolarId = savedHit ? String(savedHit.id) : (defaultCycleId() || "");
+  paintCyclePicker();
 }
 
 async function reload() {
   await loadData();
   renderView();
+}
+
+/**
+ * Selector global de Ciclo Escolar en la barra superior.
+ * Lo que se elija aquí aplica a TODOS los módulos (estudiantes, notas,
+ * exámenes, asistencia, boletas, reportes y estadísticas).
+ */
+function paintCyclePicker() {
+  const box = $("#cyclePicker");
+  const sel = $("#cycleSelect");
+  if (!box || !sel) return;
+  const list = cyclesList();
+  if (!list.length) {
+    box.hidden = true;
+    sel.innerHTML = "";
+    return;
+  }
+  box.hidden = false;
+  sel.innerHTML = list.map(c => {
+    const id = String(c.id);
+    const active = truthyFlag(c.activo !== undefined ? c.activo : c.active);
+    return '<option value="' + esc(id) + '"' + (id === activeCycleId() ? " selected" : "") + '>' +
+      esc(labelOf(c) || id) + (active ? " ★" : "") + '</option>';
+  }).join("");
+  sel.onchange = () => {
+    setActiveCycle(sel.value);
+    resetState();
+    toast("Ciclo escolar: " + cycleName(activeCycleId()), "ok");
+    renderView();
+  };
 }
 
 function applyLocalRecord(key, rec) {
@@ -1516,7 +1655,7 @@ function optionsHtml(dbKey, current, placeholder, filterByGrado = null, allowAll
 
 function scopeActivities() {
   if (!(USER && USER.rol === "docente")) return null;
-  return (DB.activities || []).filter(a => inScope("grado", relGet(a, "grado")));
+  return cycleScoped(DB.activities || []).filter(a => inScope("grado", relGet(a, "grado")));
 }
 
 function esMateriaDelDocente(m) {
@@ -1558,7 +1697,7 @@ function normalizeRole(raw) {
 
 function assignedPairs() {
   if (!USER) return [];
-  return (DB.teacher_assignments || []).filter(a => String(a.userId) === String(USER.id));
+  return cycleScoped(DB.teacher_assignments || []).filter(a => String(a.userId) === String(USER.id));
 }
 
 function teacherScoped() {
@@ -1682,14 +1821,14 @@ function childrenOf() {
 }
 
 function visibleStudents() {
-  let list = DB.students || [];
+  let list = cycleScoped(DB.students || []);
   if (USER.rol === "docente") {
     const pairs = assignedPairs();
     list = list.filter(s => pairs.some(p => relMatch(s, "grado", p.gradoId) && relMatch(s, "seccion", p.seccionId)));
   }
   if (USER.rol === "padre") {
     const kids = childrenOf();
-    list = kids || [];
+    list = (kids || []).filter(inActiveCycle);
   }
   return list;
 }
@@ -1755,7 +1894,6 @@ function renderView() {
   const c = $("#content");
   if (VIEW === "dashboard") {
     renderDashboard(c);
-    addCreateCycleButtonToDashboard();
   }
   else if (VIEW === "students") renderStudents(c);
   else if (VIEW === "assignments") renderAssignments(c);
@@ -1763,6 +1901,7 @@ function renderView() {
   else if (VIEW === "activities") renderActivities(c);
   else if (VIEW === "boletas") renderBoletas(c);
   else if (VIEW === "attReport") renderAttReport(c);
+  else if (VIEW === "ciclos") renderCiclos(c);
   else if (BATCH[VIEW]) renderBatch(c, VIEW);
   else if (CRUD_CFG[VIEW]) renderCrud(c, CRUD_CFG[VIEW]);
   else go("dashboard");
@@ -1877,37 +2016,41 @@ function renderDashboard(c) {
   const visS = visibleStudents();
   const kidIds = visS.map(s => String(s.id));
   const t = today();
+  const scopedActivities = cycleScoped(DB.activities || []);
+  const scopedGrades = cycleScoped(DB.grades || []);
+  const scopedExams = cycleScoped(DB.exams || []);
+  const scopedAtt = cycleScoped(DB.attendance || []);
   let cards = [];
 
   if (role === "admin") {
-    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t);
+    const todayAtt = scopedAtt.filter(a => datePart(a.date) === t);
     cards = [
-      [(DB.students || []).length, "Estudiantes Registrados", "👥"],
+      [visS.length, "Estudiantes Registrados", "👥"],
       [(DB.grados || []).length, "Grados Activos", "📚"],
       [(DB.secciones || []).length, "Secciones", "🏫"],
       [(DB.materias || []).length, "Materias", "📖"],
-      [(DB.activities || []).length, "Actividades Creadas", "📝"],
+      [scopedActivities.length, "Actividades Creadas", "📝"],
       [(DB.users || []).length, "Cuentas de Usuario", "👤"],
-      [(DB.grades || []).length, "Notas Asignadas", "🎯"],
+      [scopedGrades.length, "Notas Asignadas", "🎯"],
       [todayAtt.length, "Asistencias Hoy", "📅"]
     ];
   } else if (role === "docente") {
     const myActs = scopeActivities() || [];
-    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
+    const todayAtt = scopedAtt.filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
     cards = [
       [visS.length, "Mis Estudiantes", "👥"],
       [pairs.length, "Grados y Secciones Asignados", "🏫"],
       [scopeMaterias().length, "Mis Materias", "📖"],
       [myActs.length, "Mis Actividades", "📝"],
-      [(DB.grades || []).filter(g => kidIds.indexOf(String(g.studentId)) > -1).length, "Notas Registradas", "🎯"],
-      [(DB.exams || []).filter(e => kidIds.indexOf(String(e.studentId)) > -1).length, "Exámenes Calificados", "📊"],
+      [scopedGrades.filter(g => kidIds.indexOf(String(g.studentId)) > -1).length, "Notas Registradas", "🎯"],
+      [scopedExams.filter(e => kidIds.indexOf(String(e.studentId)) > -1).length, "Exámenes Calificados", "📊"],
       [todayAtt.length, "Asistencias Hoy", "📅"]
     ];
   } else {
     cards = [
       [kids ? kids.length : visS.length, "Mis Hijos", "👨‍👧‍👦"],
-      [(DB.grades || []).filter(g => kidIds.indexOf(String(g.studentId)) > -1).length, "Calificaciones", "🎯"],
-      [(DB.attendance || []).filter(a => kidIds.indexOf(String(a.studentId)) > -1).length, "Registros de Asistencia", "📅"]
+      [scopedGrades.filter(g => kidIds.indexOf(String(g.studentId)) > -1).length, "Calificaciones", "🎯"],
+      [scopedAtt.filter(a => kidIds.indexOf(String(a.studentId)) > -1).length, "Registros de Asistencia", "📅"]
     ];
   }
 
@@ -1926,17 +2069,18 @@ function renderDashboard(c) {
   }
 
   const COUNTERS = {
-    students: () => (DB.students || []).length,
-    activities: () => (DB.activities || []).length,
-    grades: () => (DB.grades || []).length,
-    exams: () => (DB.exams || []).length,
-    attendance: () => (DB.attendance || []).length,
+    students: () => visibleStudents().length,
+    activities: () => scopedActivities.length,
+    grades: () => scopedGrades.length,
+    exams: () => scopedExams.length,
+    attendance: () => scopedAtt.length,
     boletas: () => visibleStudents().length,
-    attReport: () => (DB.attendance || []).length,
+    attReport: () => scopedAtt.length,
     grados: () => (DB.grados || []).length,
     secciones: () => (DB.secciones || []).length,
     materias: () => (DB.materias || []).length,
     bimestres: () => (DB.bimestres || []).length,
+    ciclos: () => cyclesList().length,
     users: () => (DB.users || []).length,
     padres: () => (DB.padres || []).length,
     assignments: () => (DB.teacher_assignments || DB.assignments || DB.asignaciones || []).length
@@ -1945,7 +2089,7 @@ function renderDashboard(c) {
     students: "registrados", activities: "creadas", grades: "notas", exams: "notas",
     attendance: "registros", boletas: "estudiantes", attReport: "registros",
     grados: "grados", secciones: "secciones", materias: "materias",
-    bimestres: "bimestres", users: "cuentas", padres: "padres", assignments: "asignaciones"
+    bimestres: "bimestres", ciclos: "ciclos", users: "cuentas", padres: "padres", assignments: "asignaciones"
   };
   const countTitle = v => COUNT_LABEL[v] ? COUNT_LABEL[v] : "registros";
 
@@ -1972,6 +2116,26 @@ function renderDashboard(c) {
 
   const linkChildHtml = renderLinkChildCard();
 
+  const cycList = cyclesList();
+  const cycActual = activeCycleId();
+  const cycOptions = cycList.map(cv => '<option value="' + esc(String(cv.id)) + '"' + (String(cv.id) === cycActual ? ' selected' : '') + '>' +
+    esc(labelOf(cv) || String(cv.id)) + (truthyFlag(cv.activo) ? ' ★ activo' : '') + '</option>').join("");
+  const cycleBar = `
+    <div class="cycle-banner">
+      <div class="cycle-banner-info">
+        <span class="cycle-banner-ico">📅</span>
+        <div>
+          <div class="cycle-banner-lbl">Ciclo Escolar en uso</div>
+          <div class="cycle-banner-name">${esc(cycActual ? cycleName(cycActual) : "Sin ciclo definido")}</div>
+        </div>
+      </div>
+      <div class="cycle-banner-actions">
+        ${cycList.length ? '<select class="in" id="dashCycleSelect" title="Cambiar de ciclo escolar">' + cycOptions + '</select>' : ""}
+        ${role === "admin" ? '<button class="btn primary sm" id="dashNewCycle" type="button">➕ Nuevo Ciclo</button>' : ""}
+        ${role === "admin" && cycList.length ? '<button class="btn ghost sm" id="dashManageCycles" type="button">⚙️ Gestionar</button>' : ""}
+      </div>
+    </div>`;
+
   c.innerHTML = `
     <div class="menu-hero">
       <div class="mh-icon">🏫</div>
@@ -1981,6 +2145,7 @@ function renderDashboard(c) {
         <span class="mh-role">${esc(pretty(role))}</span>
       </div>
     </div>
+    ${cycleBar}
     ${extra}
     <!-- ${linkChildHtml} -->
     <!-- Se eliminaron los íconos de resumen superior -->
@@ -1996,6 +2161,18 @@ function renderDashboard(c) {
       }
     });
   });
+
+  const dashCycle = $("#dashCycleSelect");
+  if (dashCycle) dashCycle.addEventListener("change", e => {
+    setActiveCycle(e.target.value);
+    resetState();
+    toast("Ciclo escolar: " + cycleName(activeCycleId()), "ok");
+    renderView();
+  });
+  const dashNew = $("#dashNewCycle");
+  if (dashNew) dashNew.addEventListener("click", () => openCycleModal(null));
+  const dashManage = $("#dashManageCycles");
+  if (dashManage) dashManage.addEventListener("click", () => go("ciclos"));
 
   const btnLink = $("#btnLinkChild");
   if (btnLink) btnLink.addEventListener("click", linkChildFlow);
@@ -2016,23 +2193,28 @@ function renderStatsModal() {
   const t = today();
   let cards = [];
   const role = USER.rol;
+  const scopedStudents = visibleStudents();
+  const scopedActs = cycleScoped(DB.activities || []);
+  const scopedGrades = cycleScoped(DB.grades || []);
+  const scopedExams = cycleScoped(DB.exams || []);
+  const scopedAtt = cycleScoped(DB.attendance || []);
 
   if (role === "admin") {
-    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t);
+    const todayAtt = scopedAtt.filter(a => datePart(a.date) === t);
     cards = [
-      [(DB.students || []).length, "Estudiantes Registrados", "👥"],
+      [scopedStudents.length, "Estudiantes Registrados", "👥"],
       [(DB.grados || []).length, "Grados Activos", "📚"],
       [(DB.secciones || []).length, "Secciones", "🏫"],
       [(DB.materias || []).length, "Materias", "📖"],
-      [(DB.activities || []).length, "Actividades Creadas", "📝"],
-      [(DB.users || []).length, "Cuentas de Usuario", "👤"],
-      [(DB.grades || []).length, "Notas Asignadas", "🎯"],
+      [scopedActs.length, "Actividades Creadas", "📝"],
+      [scopedGrades.length, "Notas Asignadas", "🎯"],
+      [scopedExams.length, "Exámenes Calificados", "📊"],
       [todayAtt.length, "Asistencias Hoy", "📅"]
     ];
   } else if (role === "docente") {
     const myActs = scopeActivities() || [];
-    const kidIds = (visibleStudents() || []).map(s => String(s.id));
-    const todayAtt = (DB.attendance || []).filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
+    const kidIds = scopedStudents.map(s => String(s.id));
+    const todayAtt = scopedAtt.filter(a => datePart(a.date) === t && kidIds.indexOf(String(a.studentId)) > -1);
     cards = [
       [kidIds.length, "Mis Estudiantes", "👥"],
       [scopeMaterias().length, "Mis Materias", "📖"],
@@ -2155,7 +2337,7 @@ function paintActivities(editable) {
   const area = $("#accArea");
   if (!area) return;
 
-  let list = (DB.activities || []).slice();
+  let list = cycleScoped(DB.activities || []);
   if (teacherScoped()) list = list.filter(r => inScope("grado", relGet(r, "grado")));
 
   const q = (state.q.activities || "").toLowerCase().trim();
@@ -2481,6 +2663,11 @@ function fieldHtml(h, val, key) {
   }
   if (/grado|grade/i.test(h) && !/seccion|secci|section/i.test(h)) {
     inner = '<select class="in" name="' + name + '">' + optionsHtml("grados", v, undefined, null, false, relMode) + '</select>';
+  } else if (/^ciclo/i.test(kl)) {
+    const opts = cyclesList();
+    inner = '<select class="in" name="' + name + '"><option value="">— Sin ciclo —</option>' +
+      opts.map(cv => '<option value="' + esc(String(cv.id)) + '"' + (String(v) === String(cv.id) ? ' selected' : '') + '>' +
+        esc(labelOf(cv) || String(cv.id)) + '</option>').join("") + '</select>';
   } else if (/seccion|secci|section|aula/i.test(h)) {
     inner = '<select class="in" name="' + name + '">' + optionsHtml("secciones", v, undefined, null, false, relMode) + '</select>';
   } else if (/materia|subject|course|asignatura/i.test(h)) {
@@ -2564,6 +2751,10 @@ function activeBimestreId() {
 
 function newRecordDefaults(key) {
   const out = Object.assign({}, docenteDefaults(key));
+  if ((key === "students" || key === "activities") && !out.cicloId) {
+    const cyc = activeCycleId();
+    if (cyc) out.cicloId = cyc;
+  }
   if (key === "activities" || key === "exams") {
     if (out.bimestreId === undefined || out.bimestreId === "") {
       const b = activeBimestreId();
@@ -2705,6 +2896,10 @@ function openRecordModal(key, record, after) {
         return;
       }
       if (!out.id) out.id = uid();
+      if ((key === "students" || key === "activities") && (out.cicloId === undefined || out.cicloId === "")) {
+        const cyc = activeCycleId();
+        if (cyc) out.cicloId = cyc;
+      }
       if (isNew && (key === "users" || key === "padres")) {
         const pEl = form.querySelector('input[type="password"][name]');
         if (pEl && !String(pEl.value || "").trim()) {
@@ -2823,7 +3018,7 @@ function batchColumns(vk) {
 
 function findExisting(vk, st, studentId) {
   const cfg = BATCH[vk];
-  const recs = DB[cfg.key] || [];
+  const recs = cycleScoped(DB[cfg.key] || []);
   return recs.find(r => {
     if (String(r.studentId) !== String(studentId)) return false;
     if (vk === "grades") return String(r.activityId) === String(st.activity);
@@ -3078,6 +3273,11 @@ function renderBatch(c, vk) {
     const ss = scopedSecciones();
     if (ss.length === 1 && !st.seccion) st.seccion = String(ss[0]);
   }
+  // Si la actividad seleccionada pertenece a otro ciclo, se limpia.
+  if (st.activity) {
+    const act = cycleScoped(DB.activities || []).find(a => String(a.id) === String(st.activity));
+    if (!act) st.activity = "";
+  }
   const editable = canEdit(vk);
   const missing = cfg.required.filter(k => !st[k]);
   const anyOptions = cfg.controls.filter(x => x.db).every(x => (DB[x.db] || []).length > 0);
@@ -3198,7 +3398,7 @@ function renderParentGrades(c) {
   const bLbl = relLabel("bimestre", bId) || "—";
 
   const gradeIdx = {};
-  (DB.grades || []).forEach(g => {
+  cycleScoped(DB.grades || []).forEach(g => {
     gradeIdx[String(g.studentId) + "_" + String(g.activityId)] = g;
   });
 
@@ -3377,7 +3577,7 @@ function renderMatrixGrades(c) {
 
   const editable = canEdit("grades");
 
-  const allActs = DB.activities || [];
+  const allActs = cycleScoped(DB.activities || []);
   const activities = allActs.filter(a => {
     const matchB = !mg.bimestre || relMatch(a, "bimestre", mg.bimestre);
     const matchG = !mg.grado || relMatch(a, "grado", mg.grado);
@@ -3396,7 +3596,7 @@ function renderMatrixGrades(c) {
   }
 
   const gradesMap = {};
-  (DB.grades || []).forEach(g => {
+  cycleScoped(DB.grades || []).forEach(g => {
     const sId = String(g.studentId || "");
     const aId = String(g.activityId || "");
     const val = g.nota !== undefined ? g.nota : (g.score !== undefined ? g.score : (g.puntaje !== undefined ? g.puntaje : g.valor));
@@ -3989,7 +4189,7 @@ function materiasDelGrado(gId) {
 }
 
 function activitiesForMateria(gId, mId, bId) {
-  return (DB.activities || []).filter(a => {
+  return cycleScoped(DB.activities || []).filter(a => {
     const ag = relGet(a, "grado");
     const okG = !gId || ag === undefined || ag === null || String(ag).trim() === "" ||
       relMatchEquivalent("grado", ag, gId);
@@ -4002,7 +4202,7 @@ function activitiesForMateria(gId, mId, bId) {
 function attSummaryRange(studentId, desde, hasta) {
   const sCol = attStatusCol();
   const c = { present: 0, absent: 0, late: 0, justified: 0, total: 0 };
-  (DB.attendance || []).forEach(r => {
+  cycleScoped(DB.attendance || []).forEach(r => {
     if (String(r.studentId) !== String(studentId)) return;
     const d = datePart(r.date);
     if (!d) return;
@@ -4314,9 +4514,9 @@ function renderBoletas(c) {
   const opts = { bimestre: st.bimestre, grado: st.grado, examenMax };
 
   const gradeIdx = {};
-  (DB.grades || []).forEach(g => { gradeIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+  cycleScoped(DB.grades || []).forEach(g => { gradeIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
   const examsByStudent = {};
-  (DB.exams || []).forEach(e => {
+  cycleScoped(DB.exams || []).forEach(e => {
     const k = String(e.studentId);
     (examsByStudent[k] = examsByStudent[k] || []).push(e);
   });
@@ -4763,6 +4963,7 @@ async function saveBatch(vk) {
         if (sv2 && (item[target] === undefined || item[target] === "")) item[target] = sv2;
       });
     }
+    if (activeCycleId() && (item.cicloId === undefined || item.cicloId === "")) item.cicloId = activeCycleId();
     items.push(item);
   });
   if (!items.length) { toast("No hay cambios que guardar", "err"); return; }
@@ -4804,6 +5005,7 @@ async function saveAttendance(st) {
     item.date = st.fecha;
     item[sCol] = status;
     item.comment = status === "justified" ? comment : "";
+    if (activeCycleId() && (item.cicloId === undefined || item.cicloId === "")) item.cicloId = activeCycleId();
     items.push(item);
   });
   if (!items.length) { toast("No hay cambios que guardar", "err"); return; }
@@ -4826,7 +5028,7 @@ function renderAssignments(c) {
   const cur = state.assign.userId;
   if (state.assign.rows === undefined || state.assign.forUser !== cur) {
     state.assign.forUser = cur;
-    state.assign.rows = (DB.teacher_assignments || [])
+    state.assign.rows = cycleScoped(DB.teacher_assignments || [])
       .filter(a => String(a.userId) === String(cur))
       .map(p => ({ gradoId: String(p.gradoId === undefined ? "" : p.gradoId), seccionId: String(p.seccionId === undefined ? "" : p.seccionId) }));
   }
@@ -4862,7 +5064,7 @@ function renderAssignments(c) {
     const payload = rows.filter(r => r.gradoId || r.seccionId);
     try {
       setLoading(true, "Guardando asignaciones...");
-      const r = await apiPost({ action: "save_assignments", payload: { userId: state.assign.userId, assignments: payload } });
+      const r = await apiPost({ action: "save_assignments", payload: { userId: state.assign.userId, cicloId: activeCycleId(), assignments: payload } });
       setLoading(false);
       if (r && (r.error || r.success === false)) { toast(r.error || r.message || "Error al guardar", "err"); return; }
       toast("Asignaciones actualizadas correctamente", "ok");
@@ -4891,8 +5093,8 @@ function renderAssignments(c) {
 }
 
 function assignmentsTable() {
-  const list = DB.teacher_assignments || [];
-  if (!list.length) return '<div class="empty"><div class="empty-icon">🔗</div>No hay asignaciones registradas en el sistema.</div>';
+  const list = cycleScoped(DB.teacher_assignments || []);
+  if (!list.length) return '<div class="empty"><div class="empty-icon">🔗</div>No hay asignaciones registradas en el ciclo escolar en uso.</div>';
   const userLabel = id => {
     const u = (DB.users || []).find(x => String(x.id) === String(id));
     return u ? labelOf(u) : String(id);
@@ -4945,6 +5147,7 @@ async function bootApp() {
     setLoading(false);
     showApp();
     buildNav();
+    paintCyclePicker();
     go("dashboard");
   } catch (err) {
     setLoading(false);
@@ -5173,101 +5376,163 @@ function bindGlobal() {
 
   $("#btnConn").addEventListener("click", openConnModal);
   $("#btnHome").addEventListener("click", () => go("dashboard"));
-  addCreateCycleButtonToDashboard();
 }
 
-/**
- * Muestra un modal para crear un nuevo ciclo escolar.
- */
-function showCycleCreationModal() {
-  const ov = document.createElement("div");
-  ov.className = "modal-ov";
-  ov.innerHTML = `
-    <div class="modal" style="max-width:400px;">
-      <div class="mh">
-        <h3>Crear Nuevo Ciclo Escolar</h3>
-        <button class="x" type="button" data-close>&times;</button>
-      </div>
-      <div class="mc">
-        <form id="cycleForm">
-          <div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:4px; font-size:13px;">Nombre del ciclo <span style="color:#d33;">*</span></label>
-            <input type="text" id="cycleNombre" class="in" placeholder="Ej: 2027" style="width:100%; padding:6px; font-size:13px;">
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:4px; font-size:13px;">Fecha de Inicio <span style="color:#d33;">(opcional)</span></label>
-            <input type="date" id="cycleInicio" class="in" style="width:100%; padding:6px; font-size:13px;">
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:4px; font-size:13px;">Fecha de Fin <span style="color:#d33;">(opcional)</span></label>
-            <input type="date" id="cycleFin" class="in" style="width:100%; padding:6px; font-size:13px;">
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:4px; font-size:13px;">Activo <span style="color:#d33;">(por defecto TRUE)</span></label>
-            <input type="checkbox" id="cycleActivo" class="in" checked style="width:auto; margin-right:4px; vertical-align:middle;">
-          </div>
-        </form>
-      </div>
-      <div class="mf">
-        <button class="btn ghost" data-cancel>No</button>
-        <button class="btn primary" data-accept>Crear Ciclo</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(ov);
-  
-  const btnCancel = ov.querySelector("[data-cancel]");
-  const btnAccept = ov.querySelector("[data-accept]");
-  const closeBtn = ov.querySelector("[data-close]");
-  
-  function cleanup() { ov.remove(); }
-  
-  btnAccept.addEventListener("click", async () => {
-    const nombre = ov.querySelector("#cycleNombre").value.trim();
-    if (!nombre) { toast("Nombre obligatorio", "err"); return; }
-    
-    setLoading(true, "Guardando ciclo...");
-    try {
-      const r = await apiPost({
-        action: "save_cycle", token: USER.token, 
-        payload: { nombre, fechaInicio: ov.querySelector("#cycleInicio").value, fechaFin: ov.querySelector("#cycleFin").value, activo: ov.querySelector("#cycleActivo").checked }
-      });
-      setLoading(false);
-      if (r && r.success) {
-        toast("Ciclo creado: " + r.nombre, "ok");
-        await loadData();
-        renderView();
-        cleanup();
-      } else {
-        toast("Error: " + (r.error || "Desconocido"), "err");
-      }
-    } catch (e) { setLoading(false); toast("Error: " + e.message, "err"); }
-  });
-  
-  btnCancel.addEventListener("click", cleanup);
-  closeBtn.addEventListener("click", cleanup);
-}
+// ==========================================
+// GESTIÓN DE CICLOS ESCOLARES
+// ==========================================
+function renderCiclos(c) {
+  const list = cyclesList();
+  const active = activeCycleId();
+  const countStudents = cyc => (DB.students || []).filter(s => cycleOf(s) === String(cyc.id)).length;
 
-function addCreateCycleButtonToDashboard() {
-  if (!USER || USER.rol !== "admin" || VIEW !== "dashboard") return;
-  const c = $("#content");
-  if (!c) return;
-  if ($("#dashboardCreateCycleBtn")) return;
-  
-  const btn = document.createElement("button");
-  btn.id = "dashboardCreateCycleBtn";
-  btn.className = "btn primary";
-  btn.style.cssText = "margin:20px; padding:10px 20px;";
-  btn.innerHTML = "🔄 Crear Nuevo Ciclo";
-  
-  const pageHead = c.querySelector(".page-head");
-  if (pageHead) {
-    pageHead.parentNode.insertBefore(btn, pageHead.nextSibling);
+  let rows;
+  if (!list.length) {
+    rows = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">🔄</div>Aún no hay ciclos escolares registrados. Crea el primero para separar la información por año.</div></td></tr>';
   } else {
-    c.prepend(btn);
+    rows = list.map((cyc, i) => {
+      const inUse = String(cyc.id) === active;
+      const flag = truthyFlag(cyc.activo !== undefined ? cyc.activo : cyc.active);
+      return '<tr>' +
+        '<td><b>' + esc(labelOf(cyc) || cyc.id) + '</b>' +
+          '<div style="font-size:11px;color:var(--text-muted)">ID: ' + esc(cyc.id) + '</div></td>' +
+        '<td>' + esc(fmtDate(cyc.fechaInicio || cyc.start) || "—") + '</td>' +
+        '<td>' + esc(fmtDate(cyc.fechaFin || cyc.end) || "—") + '</td>' +
+        '<td style="text-align:center">' + countStudents(cyc) + '</td>' +
+        '<td>' +
+          (flag ? '<span class="badge success">Activo</span>' : '<span class="badge warning">Inactivo</span>') +
+          (inUse ? ' <span class="badge info">En uso</span>' : '') +
+        '</td>' +
+        '<td class="actions" style="text-align:right;white-space:nowrap">' +
+          (!inUse ? '<button class="btn sm ghost" type="button" data-use="' + i + '">Usar</button> ' : '') +
+          '<button class="btn sm ghost" type="button" data-edit="' + i + '">Editar</button> ' +
+          '<button class="btn sm danger" type="button" data-del="' + i + '">Eliminar</button>' +
+        '</td>' +
+      '</tr>';
+    }).join("");
   }
-  
-  btn.addEventListener("click", showCycleCreationModal);
+
+  c.innerHTML =
+    '<div class="page-head">' +
+      '<div><h1>Ciclos Escolares</h1><p>Administra los años lectivos. El ciclo en uso filtra estudiantes, notas, exámenes, asistencia y boletas.</p></div>' +
+      '<div class="head-actions">' +
+        '<button class="btn primary" id="cyAdd" type="button">➕ Nuevo Ciclo</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="hint" style="margin-bottom:16px">📅 Ciclo actualmente en uso: <b>' + esc(active ? cycleName(active) : "Sin ciclo definido") + '</b>. ' +
+      'Los registros sin ciclo asignado se consideran del ciclo base (el más antiguo).</div>' +
+    '<div class="card"><div class="table-wrap"><table id="cyclesTable"><thead><tr>' +
+      '<th>Ciclo</th><th>Inicio</th><th>Fin</th><th style="text-align:center">Estudiantes</th><th>Estado</th>' +
+      '<th class="actions" style="text-align:right">Acciones</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+
+  const add = $("#cyAdd");
+  if (add) add.addEventListener("click", () => openCycleModal(null));
+  if (!list.length) return;
+  c.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openCycleModal(list[+b.dataset.edit])));
+  c.querySelectorAll("[data-use]").forEach(b => b.addEventListener("click", () => activateCycleById(list[+b.dataset.use].id)));
+  c.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deleteCycleRow(list[+b.dataset.del])));
+}
+
+function openCycleModal(cyc) {
+  const isEdit = !!(cyc && cyc.id);
+  const maxId = cyclesList().reduce((m, cv) => Math.max(m, parseInt(String(cv.id).replace(/[^0-9]/g, ""), 10) || 0), 0);
+  const sugerido = String(maxId ? maxId + 1 : new Date().getFullYear());
+  const nombre = isEdit ? (labelOf(cyc) || String(cyc.id)) : sugerido;
+  const inicio = isoDate(cyc && (cyc.fechaInicio || cyc.start)) || "";
+  const fin = isoDate(cyc && (cyc.fechaFin || cyc.end)) || "";
+  const activo = isEdit ? truthyFlag(cyc.activo !== undefined ? cyc.activo : cyc.active) : true;
+
+  const body =
+    '<div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px">' +
+      '<label class="fld" style="grid-column:1/-1"><span>Nombre del ciclo *</span>' +
+        '<input class="in" id="cyNombre" value="' + esc(nombre) + '" placeholder="Ej. 2027"></label>' +
+      '<label class="fld"><span>Fecha de inicio</span>' +
+        '<input class="in" type="date" id="cyInicio" value="' + esc(inicio) + '"></label>' +
+      '<label class="fld"><span>Fecha de fin</span>' +
+        '<input class="in" type="date" id="cyFin" value="' + esc(fin) + '"></label>' +
+      '<label class="fld" style="grid-column:1/-1;display:flex;flex-direction:row;align-items:center;gap:9px;cursor:pointer">' +
+        '<input type="checkbox" id="cyActivo"' + (activo ? " checked" : "") + ' style="width:16px;height:16px">' +
+        '<span style="margin:0">Marcar este ciclo como activo</span></label>' +
+    '</div>' +
+    '<div class="hint" style="margin-top:12px">Los registros nuevos (estudiantes, actividades, notas, exámenes y asistencia) se vincularán automáticamente al ciclo en uso.</div>';
+
+  const foot = '<button class="btn ghost" type="button" data-cancel>Cancelar</button> ' +
+    '<button class="btn primary" type="button" data-save>' + (isEdit ? "Guardar cambios" : "Crear Ciclo") + '</button>';
+
+  openModal(isEdit ? "Editar Ciclo Escolar" : "Nuevo Ciclo Escolar", body, foot, ov => {
+    ov.querySelector("[data-cancel]").addEventListener("click", () => ov.remove());
+    ov.querySelector("[data-save]").addEventListener("click", async () => {
+      const nom = ov.querySelector("#cyNombre").value.trim();
+      if (!nom) { toast("Escribe el nombre del ciclo", "err"); return; }
+      const payload = {
+        nombre: nom,
+        fechaInicio: ov.querySelector("#cyInicio").value,
+        fechaFin: ov.querySelector("#cyFin").value,
+        activo: ov.querySelector("#cyActivo").checked
+      };
+      if (isEdit) payload.id = String(cyc.id);
+      setLoading(true, isEdit ? "Actualizando ciclo..." : "Creando ciclo...");
+      try {
+        const r = await apiPost({ action: "save_cycle", payload: payload });
+        setLoading(false);
+        if (!r || r.error || r.success === false) {
+          toast((r && (r.error || r.message)) || "No se pudo guardar el ciclo", "err");
+          return;
+        }
+        ov.remove();
+        toast(isEdit ? "Ciclo actualizado correctamente" : ("Ciclo creado: " + (r.nombre || nom)), "ok");
+        await loadData();
+        if (r.id && payload.activo) setActiveCycle(r.id);
+        paintCyclePicker();
+        renderView();
+      } catch (e) {
+        setLoading(false);
+        toast("Error: " + e.message, "err");
+      }
+    });
+  });
+}
+
+async function activateCycleById(id) {
+  setLoading(true, "Activando ciclo...");
+  try {
+    const r = await apiPost({ action: "save_cycle", payload: { id: String(id), activo: true, activate: true } });
+    setLoading(false);
+    if (!r || r.error || r.success === false) {
+      toast((r && (r.error || r.message)) || "No se pudo activar el ciclo", "err");
+      return;
+    }
+    await loadData();
+    setActiveCycle(id);
+    renderView();
+    toast("Ciclo activo: " + cycleName(id), "ok");
+  } catch (e) {
+    setLoading(false);
+    toast("Error: " + e.message, "err");
+  }
+}
+
+async function deleteCycleRow(cyc) {
+  const ok = await confirmCustom("¿Eliminar el ciclo \"" + (labelOf(cyc) || cyc.id) + "\"?\n\nLos registros ya guardados conservarán su número de ciclo, pero dejarán de verse si no existe.");
+  if (!ok) return;
+  setLoading(true, "Eliminando ciclo...");
+  try {
+    const r = await apiPost({ action: "delete_cycle", payload: { id: String(cyc.id) } });
+    setLoading(false);
+    if (!r || r.error || r.success === false) {
+      toast((r && (r.error || r.message)) || "No se pudo eliminar el ciclo", "err");
+      return;
+    }
+    const wasActive = String(cyc.id) === activeCycleId();
+    await loadData();
+    if (wasActive) setActiveCycle(defaultCycleId());
+    renderView();
+    toast("Ciclo eliminado", "ok");
+  } catch (e) {
+    setLoading(false);
+    toast("Error: " + e.message, "err");
+  }
 }
 
 

@@ -122,7 +122,7 @@ function doPost(e) {
       "save_student", "save_grado", "save_seccion", "save_materia",
       "save_bimestre", "save_user", "save_parent_user", "save_assignments",
       "delete_student", "delete_grados", "delete_secciones", "delete_materias",
-      "delete_activities", "migrate_student_labels", "save_cycle"
+      "delete_activities", "migrate_student_labels", "save_cycle", "delete_cycle"
     ];
     const STAFF = ["save_grades", "save_exams", "save_attendance", "save_actividad"];
 
@@ -132,6 +132,17 @@ function doPost(e) {
     if (STAFF.indexOf(action) > -1 && role !== "admin" && role !== "docente") {
       return jsonResponse({ success: false, code: "AUTH", error: "No autorizado para esta acción" });
     }
+
+    // Asegura la columna cicloId en las hojas que se segregan por ciclo escolar.
+    const CYCLE_SHEETS = {
+      save_student: "Estudiantes",
+      save_actividad: "Actividades",
+      save_grades: "Notas",
+      save_exams: "Examenes",
+      save_attendance: "Asistencia",
+      save_assignments: "AsignacionesDocentes"
+    };
+    if (CYCLE_SHEETS[action]) ensureCycleColumns(CYCLE_SHEETS[action]);
 
     let out;
     switch (action) {
@@ -175,6 +186,9 @@ function doPost(e) {
         break;
       case "save_cycle":
         out = saveCycle(data.payload);
+        break;
+      case "delete_cycle":
+        out = deleteCycle(data.payload);
         break;
 
       case "delete_student":
@@ -747,6 +761,38 @@ function ensureSheetColumns(sheetName, cols) {
   cacheDropSheet(sheetName);
 }
 
+/**
+ * Agrega la columna "cicloId" a una hoja si no existe.
+ */
+function ensureCycleColumns(sheetName) {
+  ensureSheetColumns(sheetName, ["cicloId"]);
+}
+
+/**
+ * Devuelve el id del ciclo marcado como activo (o el primero de la hoja "Ciclos").
+ */
+function activeCycleSheetId() {
+  const rows = getSheetDataCached("Ciclos") || [];
+  if (!rows.length) return "";
+  const isOn = function (v) {
+    if (v === true) return true;
+    const s = String(v === undefined || v === null ? "" : v).trim().toLowerCase();
+    return s === "true" || s === "1" || s === "si" || s === "sí" || s === "activo" || s === "x";
+  };
+  const act = rows.find(function (r) { return isOn(r.activo !== undefined ? r.activo : r.active); });
+  const pick = act || rows[0];
+  return String(pick.id === undefined || pick.id === null ? "" : pick.id);
+}
+
+/**
+ * Ciclo base: el primero de la hoja "Ciclos" (donde quedan los datos históricos).
+ */
+function defaultCycleSheetId() {
+  const rows = getSheetDataCached("Ciclos") || [];
+  if (!rows.length) return "";
+  return String(rows[0].id === undefined || rows[0].id === null ? "" : rows[0].id);
+}
+
 function saveRow(sheetName, payload, idKey) {
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return jsonResponse({ success: false, message: "Hoja no encontrada: " + sheetName });
@@ -764,6 +810,15 @@ function saveRow(sheetName, payload, idKey) {
 
   if (!payload[idKey]) {
     payload[idKey] = "ID-" + new Date().getTime() + "-" + Math.floor(Math.random() * 1000);
+  }
+
+  // Vincula automáticamente al ciclo activo si no se indicó uno.
+  if ((sheetName === "Estudiantes" || sheetName === "Actividades") && headers.indexOf("cicloId") > -1) {
+    const cyc = payload.cicloId;
+    if (cyc === undefined || cyc === null || String(cyc).trim() === "") {
+      const ac = activeCycleSheetId();
+      if (ac) payload.cicloId = ac;
+    }
   }
 
   let rowIndex = -1;
@@ -902,6 +957,24 @@ function batchUpdate(sheetName, payloadArray, requiredIdCols) {
   const mIdIdx = headers.indexOf("materiaId");
   const bIdIdx = headers.indexOf("bimestreId");
   const dIdx = headers.indexOf("date");
+  const cIdIdx = headers.indexOf("cicloId");
+
+  // Vincula automáticamente al ciclo activo los registros sin ciclo.
+  if (cIdIdx > -1) {
+    const ac = activeCycleSheetId();
+    payloadArray.forEach(function (item) {
+      if (item && (item.cicloId === undefined || item.cicloId === null || String(item.cicloId).trim() === "")) {
+        if (ac) item.cicloId = ac;
+      }
+    });
+  }
+
+  const sameCycle = function (row, item) {
+    if (cIdIdx === -1) return true;
+    const rc = String(row[cIdIdx] === undefined || row[cIdIdx] === null ? "" : row[cIdIdx]).trim();
+    const ic = String(item.cicloId === undefined || item.cicloId === null ? "" : item.cicloId).trim();
+    return !rc || !ic || rc === ic;
+  };
 
   const notaLike = ["nota", "score", "puntaje", "valor", "calificacion", "notaFinal", "points"];
   let notaCol = null;
@@ -931,14 +1004,16 @@ function batchUpdate(sheetName, payloadArray, requiredIdCols) {
     for (let i = 1; i < data.length; i++) {
       if (sheetName === "Notas") {
         if (String(data[i][sIdIdx]) === String(item.studentId) &&
-            String(data[i][aIdIdx]) === String(item.activityId)) {
+            String(data[i][aIdIdx]) === String(item.activityId) &&
+            sameCycle(data[i], item)) {
           rowIndex = i + 1;
           break;
         }
       } else if (sheetName === "Examenes") {
         if (String(data[i][sIdIdx]) === String(item.studentId) &&
             String(data[i][mIdIdx]) === String(item.materiaId) &&
-            String(data[i][bIdIdx]) === String(item.bimestreId)) {
+            String(data[i][bIdIdx]) === String(item.bimestreId) &&
+            sameCycle(data[i], item)) {
           rowIndex = i + 1;
           break;
         }
@@ -951,7 +1026,7 @@ function batchUpdate(sheetName, payloadArray, requiredIdCols) {
           dateStr = String(rowDate).split("T")[0].trim();
         }
         let itemDate = String(item.date).split("T")[0].trim();
-        if (String(data[i][sIdIdx]) === String(item.studentId) && dateStr === itemDate) {
+        if (String(data[i][sIdIdx]) === String(item.studentId) && dateStr === itemDate && sameCycle(data[i], item)) {
           rowIndex = i + 1;
           break;
         }
@@ -1048,6 +1123,7 @@ function saveAttendance(payload) {
     });
   }
   var idCol = findCol(["id"]);
+  var cycCol = findCol(["cicloId"]);
 
   var data = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), lastCol).getValues();
   var tz = Session.getScriptTimeZone();
@@ -1069,8 +1145,12 @@ function saveAttendance(payload) {
         dateStr = String(rowDate).split("T")[0].trim();
       }
       if (String(data[i][sidCol]) === String(item.studentId) && dateStr === itemDate) {
-        rowIndex = i + 1;
-        break;
+        var rowCyc = cycCol > -1 ? String(data[i][cycCol] === undefined || data[i][cycCol] === null ? "" : data[i][cycCol]).trim() : "";
+        var itemCyc = String(item.cicloId === undefined || item.cicloId === null ? "" : item.cicloId).trim();
+        if (!rowCyc || !itemCyc || rowCyc === itemCyc) {
+          rowIndex = i + 1;
+          break;
+        }
       }
     }
 
@@ -1104,6 +1184,8 @@ function saveAttendance(payload) {
         } else {
           values.push("ID-" + new Date().getTime() + "-" + Math.floor(Math.random() * 10000));
         }
+      } else if (cycCol > -1 && h === cycCol) {
+        values.push(item.cicloId && String(item.cicloId).trim() !== "" ? item.cicloId : activeCycleSheetId());
       } else {
         var v = item[headers[h]];
         if ((v === undefined || v === null || v === "") && rowIndex > 0) {
@@ -1130,44 +1212,93 @@ function saveAttendance(payload) {
 }
 
 /**
- * Guarda un nuevo ciclo escolar en la hoja "Ciclos".
- * Payload esperado: { nombre, fechaInicio, fechaFin, activo }
- * El ID se genera automáticamente como el siguiente número disponible
- * (basado en el último ciclo existente, o 2024 por defecto).
+ * Guarda un ciclo escolar en la hoja "Ciclos" (crear o editar).
+ * Payload esperado: { id?, nombre, fechaInicio, fechaFin, activo, activate? }
+ * - Sin "id": genera el siguiente número disponible (2024, 2025, ...).
+ * - Con "id": actualiza ese ciclo.
+ * - Si "activo"/"activate" es verdadero, deja ese ciclo como único activo.
  */
 function saveCycle(payload) {
+  payload = payload || {};
   var sheet = ss.getSheetByName("Ciclos");
   if (!sheet) {
     sheet = ss.getActiveSpreadsheet().insertSheet("Ciclos");
     sheet.getRange(1, 1, 1, 5).setValues([["id", "nombre", "fechaInicio", "fechaFin", "activo"]]);
   }
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
-  
-  // Generar siguiente ID
-  var existingIds = [];
+
+  var lastCol = sheet.getLastColumn();
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var col = function (name) { return headers.indexOf(name); };
+  var idCol = col("id"), nomCol = col("nombre"), iniCol = col("fechaInicio"), finCol = col("fechaFin"), actCol = col("activo");
+  if (idCol === -1) return jsonResponse({ success: false, error: "La hoja 'Ciclos' no tiene la columna 'id'" });
+
   var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    data.forEach(function (row) {
-      var num = Number(String(row[0]).replace(/[^0-9]/g, ""));
-      if (!isNaN(num)) existingIds.push(num);
+  var rows = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+
+  var wantedId = payload.id === undefined || payload.id === null ? "" : String(payload.id).trim();
+  var rowIndex = -1;
+  var existingIds = [];
+
+  for (var i = 0; i < rows.length; i++) {
+    var rowId = String(rows[i][idCol] === undefined ? "" : rows[i][idCol]).trim();
+    if (!rowId) continue;
+    if (wantedId && rowId === wantedId) rowIndex = i;
+    var num = Number(rowId.replace(/[^0-9]/g, ""));
+    if (!isNaN(num)) existingIds.push(num);
+  }
+
+  var nextId = existingIds.length > 0 ? Math.max.apply(Math, existingIds) + 1 : new Date().getFullYear();
+  var targetId = wantedId || String(nextId);
+  var nombre = payload.nombre !== undefined && String(payload.nombre).trim() !== ""
+    ? String(payload.nombre).trim()
+    : (rowIndex > -1 ? String(rows[rowIndex][nomCol] || targetId) : "Ciclo " + targetId);
+  var fechaInicio = payload.fechaInicio !== undefined ? payload.fechaInicio
+    : (rowIndex > -1 && iniCol > -1 ? rows[rowIndex][iniCol] : "01/02/" + targetId);
+  var fechaFin = payload.fechaFin !== undefined ? payload.fechaFin
+    : (rowIndex > -1 && finCol > -1 ? rows[rowIndex][finCol] : "30/11/" + targetId);
+  var activo = payload.activo !== undefined ? payload.activo
+    : (rowIndex > -1 && actCol > -1 ? rows[rowIndex][actCol] : true);
+  var makeActive = payload.activate === true || activo === true || String(activo).toLowerCase() === "true";
+
+  // Un solo ciclo activo a la vez
+  if (makeActive && actCol > -1) {
+    var offs = [];
+    for (var r = 0; r < rows.length; r++) {
+      var rid = String(rows[r][idCol] === undefined ? "" : rows[r][idCol]).trim();
+      if (rid && rid !== targetId) offs.push(r);
+    }
+    offs.forEach(function (r) {
+      sheet.getRange(r + 2, actCol + 1).setValue("false");
     });
   }
-  var nextId = existingIds.length > 0 ? Math.max.apply(Math, existingIds) + 1 : 2024;
-  
-  var nombre = payload.nombre || "Ciclo " + nextId;
-  var fechaInicio = payload.fechaInicio || "01/02/" + nextId;
-  var fechaFin = payload.fechaFin || "30/11/" + nextId;
-  var activo = payload.activo !== undefined ? payload.activo : true;
-  
-  var newRow = [String(nextId), nombre, fechaInicio, fechaFin, String(activo).toLowerCase()];
-  sheet.appendRow(newRow);
-  
-  // Invalida el cache de ciclos
+
+  var values = [];
+  for (var c = 0; c < headers.length; c++) {
+    var h = headers[c];
+    if (h === "id") values.push(targetId);
+    else if (h === "nombre") values.push(nombre);
+    else if (h === "fechaInicio") values.push(fechaInicio);
+    else if (h === "fechaFin") values.push(fechaFin);
+    else if (h === "activo") values.push(makeActive ? "true" : "false");
+    else values.push("");
+  }
+
+  if (rowIndex > -1) sheet.getRange(rowIndex + 2, 1, 1, headers.length).setValues([values]);
+  else sheet.appendRow(values);
+
   cacheDropSheet("Ciclos");
-  
-  return jsonResponse({ success: true, id: String(nextId), nombre: nombre });
+  cacheDropAll();
+
+  var record = {};
+  headers.forEach(function (h, idx) { record[h] = values[idx]; });
+  return jsonResponse({ success: true, id: targetId, nombre: nombre, record: record });
 }
+
+/**
+ * Elimina un ciclo de la hoja "Ciclos".
+ */
+function deleteCycle(payload) {
+  return deleteRow("Ciclos", payload && payload.id, "id");
 }
 
 // ==========================================
