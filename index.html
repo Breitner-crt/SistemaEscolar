@@ -908,19 +908,19 @@ const LS_EXAM_MAX = "escolar_exam_max";
 const LS_CYCLE = "escolar_ciclo_id";
 
 const FALLBACK_HEADERS = {
-  students: ["id","nombre","gradoId","seccionId","cicloId","dni","fechaNacimiento","sexo","direccion","telefono","padreId"],
+  students: ["id","nombre","gradoId","seccionId","dni","fechaNacimiento","sexo","direccion","telefono","padreId"],
   grados: ["id","nombre","descripcion"],
   secciones: ["id","nombre","gradoId"],
   materias: ["id","nombre","descripcion"],
   bimestres: ["id","nombre","start","end","active"],
-  activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax","cicloId"],
+  activities: ["id","nombre","descripcion","gradoId","materiaId","bimestreId","fecha","puntajeMax"],
   users: ["id","usuario","contraseña","nombre","rol"],
   padres: ["id","nombre","usuario","contraseña","telefono","childrenIds"],
   padres_hijos: ["id","padreId","usuario","studentId","parentesco","activo"],
-  grades: ["id","studentId","activityId","nota","cicloId"],
-  exams: ["id","studentId","materiaId","bimestreId","nota","cicloId"],
-  attendance: ["id","studentId","date","status","comment","cicloId"],
-  teacher_assignments: ["id","userId","gradoId","seccionId","cicloId"],
+  grades: ["id","studentId","activityId","nota"],
+  exams: ["id","studentId","materiaId","bimestreId","nota"],
+  attendance: ["id","studentId","date","status","comment"],
+  teacher_assignments: ["id","userId","gradoId","seccionId"],
   ciclos: ["id","nombre","fechaInicio","fechaFin","activo"]
 };
 
@@ -1210,6 +1210,7 @@ function pretty(k) {
   if (/^due\s*date$/i.test(s.trim())) return "Fecha de entrega";
   if (/^assign\s*date$/i.test(s.trim())) return "Fecha de asignación";
   if (/^(childrenids|hijos|children|estudiantesids)$/i.test(s.replace(/\s+/g, ""))) return "Hijos";
+  if (/^cicloi?d$/i.test(s.trim())) return "Ciclo";
   return s.replace(/\b\w/g, c => c.toUpperCase()).trim();
 }
 
