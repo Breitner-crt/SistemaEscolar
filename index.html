@@ -4284,7 +4284,35 @@ function printDoc(title, bodyHtml) {
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) +
     '</title><style>' + REPORT_PRINT_CSS + '</style></head><body>' + bodyHtml + '</body></html>');
   w.document.close();
-  setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
+
+  // Al terminar de imprimir se cierra la ventana emergente y se devuelve el
+  // foco a la app. Sin esto, Chrome/Edge pueden dejar el cursor "congelado"
+  // en la ventana principal hasta minimizarla y restaurarla.
+  let finished = false;
+  let afterPrintFired = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    try { w.close(); } catch (e) { /* la ventana ya pudo cerrarse */ }
+    try { window.focus(); } catch (e) { /* sin foco programático */ }
+  };
+
+  try {
+    w.onafterprint = () => { afterPrintFired = true; finish(); };
+  } catch (e) { /* navegador sin onafterprint */ }
+
+  setTimeout(() => {
+    try {
+      w.focus();
+      w.print();
+    } catch (e) {
+      finish();
+      return;
+    }
+    // print() suele ser bloqueante: al volver, el diálogo ya se cerró. Si el
+    // navegador no disparó onafterprint, cerramos igual para liberar el cursor.
+    setTimeout(() => { if (!afterPrintFired) finish(); }, 700);
+  }, 400);
 }
 
 function exportSheetsToExcel(sheets, fileName, headerLines) {
