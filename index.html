@@ -1210,7 +1210,11 @@ function pretty(k) {
   if (/^due\s*date$/i.test(s.trim())) return "Fecha de entrega";
   if (/^assign\s*date$/i.test(s.trim())) return "Fecha de asignación";
   if (/^(childrenids|hijos|children|estudiantesids)$/i.test(s.replace(/\s+/g, ""))) return "Hijos";
-  if (/^cicloi?d$/i.test(s.trim())) return "Ciclo";
+  // El nombre de la columna del ciclo puede venir como "cicloId", "ciclo Id",
+  // "CICLO ID", "ciclo_id" o "CicloEscolarId". Se normaliza (sin espacios) para
+  // mostrarla siempre como "Ciclo".
+  const flatCol = s.replace(/\s+/g, "").toLowerCase();
+  if (flatCol === "cicloid" || flatCol === "ciclo" || flatCol === "cicloescolar" || flatCol === "cicloescolarid") return "Ciclo";
   return s.replace(/\b\w/g, c => c.toUpperCase()).trim();
 }
 
@@ -3093,6 +3097,14 @@ function cellHtml(vk, col, student, existing, editable) {
   if ((val === "" || val === undefined) && cfg.relFill && cfg.relFill[col.key]) {
     const sv = state.batch[vk][cfg.relFill[col.key]];
     if (sv) val = sv;
+  }
+  // La columna del ciclo se muestra como texto con el nombre del ciclo (no como
+  // campo editable con el ID crudo). El ciclo se asigna automáticamente al guardar.
+  if (/^ciclo/i.test(String(col.key))) {
+    const cid = String(val === undefined || val === null ? "" : val).trim() || activeCycleId();
+    const hit = (DB.ciclos || []).find(c => String(c.id) === cid);
+    const shown = hit ? (labelOf(hit) || cid) : (cid || "—");
+    return '<span class="badge info">' + esc(shown) + '</span>';
   }
   const dis = editable ? "" : " disabled";
   const common = ' data-stud="' + esc(student.id) + '" data-col="' + esc(col.key) + '"';
