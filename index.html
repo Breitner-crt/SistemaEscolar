@@ -2283,6 +2283,7 @@ function renderStudents(c) {
       '<div class="head-actions">' +
         '<input class="search" id="sQ" placeholder="🔍 Buscar estudiante...">' +
         '<button class="btn success sm" id="sExport" type="button">📊 Exportar Excel</button>' +
+        '<button class="btn ghost sm" id="sPrint" type="button">🖨️ Imprimir / PDF</button>' +
         (canEdit("students") ? '<button class="btn primary" id="sAdd" type="button">➕ Nuevo Estudiante</button>' : "") +
       '</div>' +
     '</div>' +
@@ -2311,6 +2312,7 @@ function renderStudents(c) {
   if (add) add.addEventListener("click", () => openRecordModal("students", null, paintStudents));
   
   $("#sExport").addEventListener("click", () => exportTableToExcel("studentsTable", "Estudiantes"));
+  $("#sPrint").addEventListener("click", printStudentsReport);
 
   paintStudents();
 }
@@ -2343,6 +2345,44 @@ function paintStudents() {
   if (!list.length) return;
   area.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openRecordModal("students", list[+b.dataset.edit], paintStudents)));
   area.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deleteRecord("students", list[+b.dataset.del], paintStudents)));
+}
+
+// Reporte imprimible del padrón de estudiantes con los filtros y la búsqueda
+// actuales (grado, sección y ciclo activo).
+function printStudentsReport() {
+  const headers = unionKeys(DB.students, FALLBACK_HEADERS.students);
+  let list = filterGS(visibleStudents(), state.students.grado, state.students.seccion);
+  const q = (state.q.students || "").toLowerCase();
+  if (q) list = list.filter(r => headers.some(h => String(r[h] === undefined ? "" : r[h]).toLowerCase().indexOf(q) > -1));
+  const cols = headers.filter(h => h !== "id");
+
+  const gradLbl = state.students.grado
+    ? (relLabel("grado", state.students.grado) || state.students.grado)
+    : "Todos los grados";
+  const secLbl = state.students.seccion
+    ? (relLabel("seccion", state.students.seccion) || state.students.seccion)
+    : "Todas las secciones";
+
+  const tableHtml = list.length
+    ? '<table style="font-size:10.5px"><thead><tr>' +
+        cols.map(h => '<th>' + esc(pretty(h)) + '</th>').join('') +
+      '</tr></thead><tbody>' +
+        list.map(r => '<tr>' + cols.map(h => '<td>' + esc(displayValue(h, r[h])) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table>'
+    : '<div class="empty">No se encontraron estudiantes para mostrar.</div>';
+
+  const body = '<div class="boleta">' +
+    '<div class="rep-head">' +
+      '<div><h1>Estudiantes</h1><div class="b-sub">' + esc(gradLbl) + ' · ' + esc(secLbl) + '</div></div>' +
+      '<div class="meta">Ciclo: ' + esc(cyclePrintLabel()) +
+        '<br>Generado: ' + esc(today()) + '</div>' +
+    '</div>' +
+    tableHtml +
+    '<div class="b-legend">Total de estudiantes: ' + list.length +
+      (q ? ' · Filtro de búsqueda: "' + esc(state.q.students) + '"' : '') + '</div>' +
+  '</div>';
+
+  printDoc("Estudiantes", body);
 }
 
 function renderActivities(c) {
