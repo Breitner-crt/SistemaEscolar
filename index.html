@@ -1104,6 +1104,13 @@ function setActiveCycle(id) {
   paintCyclePicker();
 }
 
+// Etiqueta legible del ciclo en uso para los encabezados de reportes impresos.
+function cyclePrintLabel() {
+  const id = activeCycleId();
+  if (!id) return "Sin ciclo";
+  return cycleName(id) || String(id);
+}
+
 
 const REPORT_PRINT_CSS = [
   "*{box-sizing:border-box}",
@@ -2183,13 +2190,40 @@ function renderDashboard(c) {
   if (btnLink) btnLink.addEventListener("click", linkChildFlow);
 }
 
-function exportTableToExcel(tableId, fileName) {
+// Inserta filas de encabezado (por ejemplo el ciclo escolar) al inicio de una
+// hoja de Excel ya generada, desplazando hacia abajo el contenido existente.
+function xlsxPrependHeaderRows(ws, rows) {
+  if (!ws || !rows || !rows.length || typeof XLSX === "undefined") return;
+  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+  const shift = rows.length;
+  const maxCols = Math.max(range.e.c + 1, ...rows.map(r => r.length));
+  for (let r = range.e.r; r >= range.s.r; r--) {
+    for (let c = range.e.c; c >= range.s.c; c--) {
+      const from = XLSX.utils.encode_cell({ r, c });
+      const to = XLSX.utils.encode_cell({ r: r + shift, c });
+      if (ws[from] !== undefined) { ws[to] = ws[from]; delete ws[from]; }
+    }
+  }
+  rows.forEach((row, i) => {
+    row.forEach((val, c) => {
+      const addr = XLSX.utils.encode_cell({ r: i, c });
+      ws[addr] = { t: "s", v: String(val === undefined || val === null ? "" : val) };
+    });
+  });
+  ws["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: range.e.r + shift, c: maxCols - 1 }
+  });
+}
+
+function exportTableToExcel(tableId, fileName, headerLines) {
   const table = document.getElementById(tableId);
   if (!table) { toast("No hay tabla para exportar", "err"); return; }
   if (typeof XLSX === "undefined") { toast("Librería Excel cargando... intenta nuevamente", "err"); return; }
   const clone = table.cloneNode(true);
   clone.querySelectorAll("th.actions, td.actions").forEach(el => el.remove());
   const wb = XLSX.utils.table_to_book(clone, { sheet: "Datos" });
+  xlsxPrependHeaderRows(wb.Sheets[wb.SheetNames[0]], headerLines);
   XLSX.writeFile(wb, `${fileName}_${today()}.xlsx`);
   toast("Archivo Excel descargado con éxito", "ok");
 }
@@ -3372,11 +3406,12 @@ function renderBatch(c, vk) {
 
   const bExport = $("#bExport");
   if (bExport) bExport.addEventListener("click", () => {
+    const cyc = [["Ciclo", cyclePrintLabel()]];
     if (vk === "attendance") {
       buildAttendanceFlatTable();
-      exportTableToExcel("attFlatExport", cfg.title);
+      exportTableToExcel("attFlatExport", cfg.title, cyc);
     } else {
-      exportTableToExcel("batchTable", cfg.title);
+      exportTableToExcel("batchTable", cfg.title, cyc);
     }
   });
 
@@ -3542,7 +3577,7 @@ function renderParentGrades(c) {
       used.add(name.toLowerCase());
       return { id: "pgTable_" + String(b.student.id), name };
     });
-    exportSheetsToExcel(sheets, "Calificaciones_" + (bLbl || ""));
+    exportSheetsToExcel(sheets, "Calificaciones_" + (bLbl || ""), [["Ciclo", cyclePrintLabel()]]);
   });
 
   const bPr = $("#pgPrint");
@@ -3552,7 +3587,7 @@ function renderParentGrades(c) {
       return '<div class="boleta">' +
         '<div class="rep-head"><div><h1>' + esc(labelOf(b.student)) + '</h1>' +
           '<div class="b-sub">' + esc([g, sec ? "Sección " + sec : ""].filter(Boolean).join(" · ")) + '</div></div>' +
-          '<div class="meta"><b>' + esc(bLbl) + '</b><br>Emitido: ' + esc(today()) + '</div></div>' +
+          '<div class="meta"><b>' + esc(bLbl) + '</b><br>Ciclo: ' + esc(cyclePrintLabel()) + '<br>Emitido: ' + esc(today()) + '</div></div>' +
         tableHtml(b) +
         '<div class="b-legend">Zona = suma de las notas de las actividades del bimestre. ' +
           'Cada actividad muestra puntos obtenidos / puntos posibles.</div>' +
@@ -3860,7 +3895,7 @@ function renderMatrixGrades(c) {
   if (btnSave) btnSave.addEventListener("click", () => saveMatrixGrades(activities));
 
   $("#btnExportMatrixExcel").addEventListener("click", () => {
-    exportTableToExcel("matrixGradesTable", "Registro_Notas_Zona");
+    exportTableToExcel("matrixGradesTable", "Registro_Notas_Zona", [["Ciclo", cyclePrintLabel()]]);
   });
 
   $("#btnPrintMatrix").addEventListener("click", () => printMatrix(false));
@@ -3882,9 +3917,9 @@ function printMatrix(all = false) {
   const printDate = new Date().toLocaleDateString();
 
   let fullHtml = "";
-  const allActs = DB.activities || [];
+  const allActs = cycleScoped(DB.activities || []);
   const gradesIdx = {};
-  (DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+  cycleScoped(DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
   const students = filterGS(visibleStudents(), mg.grado, mg.seccion)
     .sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b)), "es"));
 
@@ -3913,6 +3948,7 @@ function printMatrix(all = false) {
         '<div><b>Materia:</b> ' + esc(matLbl) + '</div>' +
         '<div><b>Grado:</b> ' + esc(gradLbl) + (secLbl !== "Todas" ? ' · Sección ' + esc(secLbl) : '') + '</div>' +
         '<div><b>Bimestre:</b> ' + esc(bimLbl) + '</div>' +
+        '<div><b>Ciclo:</b> ' + esc(cyclePrintLabel()) + '</div>' +
       '</div>' +
       '<table><thead><tr>' +
         '<th style="width:200px">Alumno</th>' +
@@ -3947,13 +3983,13 @@ function printStudentGrades(studentId) {
   const printDate = new Date().toLocaleDateString();
 
   const gradesIdx = {};
-  (DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
+  cycleScoped(DB.grades || []).forEach(g => { gradesIdx[String(g.studentId) + "_" + String(g.activityId)] = g; });
   
   const materias = scopeMaterias();
   let html = "";
 
   materias.forEach(mat => {
-      const acts = (DB.activities || []).filter(a => 
+      const acts = cycleScoped(DB.activities || []).filter(a => 
           relMatch(a, "bimestre", mg.bimestre) && 
           relMatch(a, "grado", mg.grado) && 
           relMatch(a, "materia", mat.id)
@@ -3984,7 +4020,8 @@ function printStudentGrades(studentId) {
       '<div style="margin-bottom:20px; font-size:13px;">' +
         '<b>Alumno:</b> ' + esc(labelOf(s)) + '<br>' +
         '<b>Grado:</b> ' + esc(gradLbl) + '<br>' +
-        '<b>Bimestre:</b> ' + esc(bimLbl) +
+        '<b>Bimestre:</b> ' + esc(bimLbl) + '<br>' +
+        '<b>Ciclo:</b> ' + esc(cyclePrintLabel()) +
       '</div>' +
       html + '</div>';
 
@@ -4250,7 +4287,7 @@ function printDoc(title, bodyHtml) {
   setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
 }
 
-function exportSheetsToExcel(sheets, fileName) {
+function exportSheetsToExcel(sheets, fileName, headerLines) {
   if (typeof XLSX === "undefined") {
     toast("Librería Excel cargando... intenta nuevamente", "err");
     return;
@@ -4263,6 +4300,7 @@ function exportSheetsToExcel(sheets, fileName) {
     const clone = t.cloneNode(true);
     clone.querySelectorAll("th.actions, td.actions, .pbar, button").forEach(el => el.remove());
     const ws = XLSX.utils.table_to_sheet(clone, { raw: true });
+    xlsxPrependHeaderRows(ws, headerLines);
     XLSX.utils.book_append_sheet(wb, ws, String(sh.name).slice(0, 31));
     added++;
   });
@@ -4404,6 +4442,7 @@ function boletaHtml(item, o) {
     '</div>' +
     '<div class="b-student"><b>' + esc(labelOf(s)) + '</b><br>' +
       'Grado: ' + esc(gLbl) + ' &nbsp;·&nbsp; Sección: ' + esc(sLbl) +
+      ' &nbsp;·&nbsp; Ciclo: ' + esc(cyclePrintLabel()) +
       (s.code ? ' &nbsp;·&nbsp; Código: ' + esc(s.code) : '') + '</div>' +
     '<table>' +
       '<thead><tr>' +
@@ -4463,6 +4502,7 @@ function boletaAnnualHtml(item, o) {
     '</div>' +
     '<div class="b-student"><b>' + esc(labelOf(s)) + '</b><br>' +
       'Grado: ' + esc(gLbl) + ' &nbsp;·&nbsp; Sección: ' + esc(sLbl) +
+      ' &nbsp;·&nbsp; Ciclo: ' + esc(cyclePrintLabel()) +
       (s.code ? ' &nbsp;·&nbsp; Código: ' + esc(s.code) : '') + '</div>' +
     '<table>' +
       '<thead><tr>' + head + '</tr></thead>' +
@@ -4663,7 +4703,7 @@ function renderBoletas(c) {
     renderView();
   });
 
-  $("#bolExport").addEventListener("click", () => exportTableToExcel("boletasFlatExport", annual ? "Boletas_Anual" : "Boletas"));
+  $("#bolExport").addEventListener("click", () => exportTableToExcel("boletasFlatExport", annual ? "Boletas_Anual" : "Boletas", [["Ciclo", cyclePrintLabel()]]));
   $("#bolPrintAll").addEventListener("click", () => printBoletas(data, opts));
   c.querySelectorAll("[data-boleta]").forEach(b => b.addEventListener("click", () => {
     const item = data[+b.dataset.boleta];
@@ -4732,6 +4772,7 @@ function printAttReport(summary, totals, detail, st) {
   let html = '<div class="rep-head"><div><h1>Reporte de Asistencia</h1>' +
     '<div class="b-sub">' + esc(gLbl) + ' · ' + esc(sLbl) + '</div></div>' +
     '<div class="meta">Período: ' + esc(st.desde) + ' a ' + esc(st.hasta) +
+    '<br>Ciclo: ' + esc(cyclePrintLabel()) +
     '<br>Generado: ' + esc(today()) + '</div></div>' +
     attSummaryTableHtml(summary, totals, {});
   if (detail.length) {
@@ -4782,7 +4823,7 @@ function renderAttReport(c) {
 
   const sCol = attStatusCol();
   const byStudent = {};
-  (DB.attendance || []).forEach(r => {
+  cycleScoped(DB.attendance || []).forEach(r => {
     const sid = String(r.studentId);
     if (!sMap[sid]) return;
     const d = datePart(r.date);
@@ -4895,7 +4936,7 @@ function renderAttReport(c) {
   $("#aExport").addEventListener("click", () => {
     const sheets = [{ id: "attRepTable", name: "Resumen" }];
     if (st.detalle) sheets.push({ id: "attRepDetail", name: "Detalle" });
-    exportSheetsToExcel(sheets, "Asistencia");
+    exportSheetsToExcel(sheets, "Asistencia", [["Ciclo", cyclePrintLabel()]]);
   });
   $("#aPrint").addEventListener("click", () => {
     printAttReport(summary, totals, st.detalle ? detail : [], st);
