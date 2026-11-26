@@ -1308,22 +1308,45 @@ function saveAssignments(payload) {
   let sheet = ss.getSheetByName("AsignacionesDocentes");
   if (!sheet) return jsonResponse({ success: false, message: "Hoja 'AsignacionesDocentes' no encontrada" });
 
-  const data = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), Math.max(sheet.getLastColumn(), 1)).getValues();
+  // Asegura que exista la columna cicloId antes de escribir.
+  ensureCycleColumns("AsignacionesDocentes");
 
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  const col = function (name) { return headers.indexOf(name); };
+  const idCol = col("id");
+  const userCol = col("userId");
+  const gradoCol = col("gradoId");
+  const seccionCol = col("seccionId");
+  const cicloCol = col("cicloId");
+
+  const cycle = String(payload.cicloId === undefined || payload.cicloId === null ? "" : payload.cicloId).trim() || activeCycleSheetId();
+
+  const data = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), lastCol).getValues();
+
+  // Borra solo las asignaciones del docente EN EL MISMO CICLO (no toca otros ciclos).
   for (let i = data.length - 1; i > 0; i--) {
-    if (String(data[i][1]) === String(payload.userId)) {
+    const rowUser = userCol > -1 ? String(data[i][userCol]) : String(data[i][1]);
+    const rawCyc = cicloCol > -1 ? data[i][cicloCol] : "";
+    const rowCyc = String(rawCyc === undefined || rawCyc === null ? "" : rawCyc).trim();
+    const sameCycle = !rowCyc || !cycle || rowCyc === cycle;
+    if (rowUser === String(payload.userId) && sameCycle) {
       sheet.deleteRow(i + 1);
     }
   }
 
   if (payload.assignments && payload.assignments.length > 0) {
     payload.assignments.forEach(function (asig) {
-      sheet.appendRow([
-        "ASG-" + new Date().getTime() + "-" + Math.floor(Math.random() * 1000),
-        payload.userId,
-        asig.gradoId,
-        asig.seccionId
-      ]);
+      const row = headers.map(function (h) {
+        if (h === "id") return "ASG-" + new Date().getTime() + "-" + Math.floor(Math.random() * 1000);
+        if (h === "userId") return payload.userId;
+        if (h === "gradoId") return asig.gradoId;
+        if (h === "seccionId") return asig.seccionId;
+        if (h === "cicloId") return cycle;
+        return "";
+      });
+      sheet.appendRow(row);
     });
   }
 
