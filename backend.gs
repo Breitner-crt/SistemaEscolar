@@ -121,7 +121,7 @@ function doPost(e) {
     const ADMIN_ONLY = [
       "save_student", "save_grado", "save_seccion", "save_bimestre", "save_user", "save_parent_user", "save_assignments",
       "delete_student", "delete_grados", "delete_secciones",
-      "delete_activities", "migrate_student_labels", "save_cycle", "delete_cycle"
+      "migrate_student_labels", "save_cycle", "delete_cycle"
     ];
     const STAFF = ["save_grades", "save_exams", "save_attendance", "save_actividad"];
 
