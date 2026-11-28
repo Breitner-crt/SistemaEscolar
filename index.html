@@ -2393,6 +2393,7 @@ function renderActivities(c) {
       '<div class="head-actions">' +
         '<input class="search" id="actQ" placeholder="🔍 Buscar actividad...">' +
         '<button class="btn success sm" id="actExport" type="button">📊 Exportar Excel</button>' +
+        '<button class="btn ghost sm" id="actPrint" type="button">🖨️ Imprimir / PDF</button>' +
         (editable ? '<button class="btn primary" id="actAdd" type="button">➕ Nueva Actividad</button>' : "") +
       '</div>' +
     '</div>' +
@@ -2406,8 +2407,9 @@ function renderActivities(c) {
   if (add) add.addEventListener("click", () => openRecordModal("activities", null, () => paintActivities(editable)));
   $("#actExport").addEventListener("click", () => {
     buildActivitiesFlatTable();
-    exportTableToExcel("actFlatExport", "Actividades");
+    exportTableToExcel("actFlatExport", "Actividades", [["Ciclo", cyclePrintLabel()]]);
   });
+  $("#actPrint").addEventListener("click", printActivitiesReport);
 
   paintActivities(editable);
 }
@@ -2623,11 +2625,33 @@ function activityRowHtml(a, editable, idx) {
   `;
 }
 
-function buildActivitiesFlatTable() {
-  const list = (DB.activities || []).slice();
+function activitiesReportList() {
+  let list = cycleScoped(DB.activities || []);
   if (teacherScoped()) list = list.filter(r => inScope("grado", relGet(r, "grado")));
-  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Fecha", "Puntaje Máx."];
-  const rows = list.map(a => {
+  const q = (state.q.activities || "").toLowerCase().trim();
+  if (q) {
+    list = list.filter(r => {
+      const nombre = String(r.nombre || r.name || r.titulo || "").toLowerCase();
+      const desc = String(r.descripcion || r.description || "").toLowerCase();
+      const gLabel = String(relLabel("grado", relGet(r, "grado")) || "").toLowerCase();
+      const mLabel = String(relLabel("materia", relGet(r, "materia")) || "").toLowerCase();
+      const bLabel = String(relLabel("bimestre", relGet(r, "bimestre")) || "").toLowerCase();
+      return nombre.indexOf(q) > -1 || desc.indexOf(q) > -1 || gLabel.indexOf(q) > -1 || mLabel.indexOf(q) > -1 || bLabel.indexOf(q) > -1;
+    });
+  }
+  return list.slice().sort((a, b) => {
+    const key = r => [
+      relLabel("grado", relGet(r, "grado")) || "",
+      relLabel("bimestre", relGet(r, "bimestre")) || "",
+      relLabel("materia", relGet(r, "materia")) || "",
+      String(r.nombre || r.name || r.titulo || "")
+    ].join("|");
+    return key(a).localeCompare(key(b), "es");
+  });
+}
+
+function activitiesReportRows(list) {
+  return list.map(a => {
     const pts = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
     return [
       a.nombre || a.name || a.titulo || "",
@@ -2635,14 +2659,50 @@ function buildActivitiesFlatTable() {
       relLabel("grado", relGet(a, "grado")) || "",
       relLabel("materia", relGet(a, "materia")) || "",
       relLabel("bimestre", relGet(a, "bimestre")) || "",
+      cycleName(cycleOf(a)) || "",
       datePart(ciGet(a, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"])),
       pts === undefined || pts === null ? "" : pts
     ];
   });
+}
+
+function buildActivitiesFlatTable() {
+  const list = activitiesReportList();
+  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha", "Puntaje Máx."];
+  const rows = activitiesReportRows(list);
   const t = $("#actFlatExport");
   t.innerHTML =
     "<thead><tr>" + headers.map(h => "<th>" + esc(h) + "</th>").join("") + "</tr></thead>" +
     "<tbody>" + rows.map(r => "<tr>" + r.map(v => "<td>" + esc(v) + "</td>").join("") + "</tr>").join("") + "</tbody>";
+}
+
+// Reporte imprimible de actividades con el ciclo activo, los filtros del
+// docente y la búsqueda actual.
+function printActivitiesReport() {
+  const list = activitiesReportList();
+  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha", "Puntaje"];
+  const rows = activitiesReportRows(list);
+
+  const tableHtml = list.length
+    ? '<table style="font-size:10px"><thead><tr>' +
+        headers.map(h => '<th>' + esc(h) + '</th>').join('') +
+      '</tr></thead><tbody>' +
+        rows.map(r => '<tr>' + r.map(v => '<td>' + esc(v) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table>'
+    : '<div class="empty">No se encontraron actividades para mostrar.</div>';
+
+  const body = '<div class="boleta">' +
+    '<div class="rep-head">' +
+      '<div><h1>Actividades</h1><div class="b-sub">Tareas, prácticas y evaluaciones continuas</div></div>' +
+      '<div class="meta">Ciclo: ' + esc(cyclePrintLabel()) +
+        '<br>Generado: ' + esc(today()) + '</div>' +
+    '</div>' +
+    tableHtml +
+    '<div class="b-legend">Total de actividades: ' + list.length +
+      (state.q.activities ? ' · Filtro de búsqueda: "' + esc(state.q.activities) + '"' : '') + '</div>' +
+  '</div>';
+
+  printDoc("Actividades", body);
 }
 
 function renderCrud(c, cfg) {
@@ -4315,44 +4375,53 @@ function attSummaryFor(studentId, bId) {
 }
 
 function printDoc(title, bodyHtml) {
-  const w = window.open("", "_blank");
-  if (!w) {
-    toast("Permite las ventanas emergentes para imprimir", "err");
-    return;
-  }
-  w.document.open();
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) +
-    '</title><style>' + REPORT_PRINT_CSS + '</style></head><body>' + bodyHtml + '</body></html>');
-  w.document.close();
+  // Se imprime desde un iframe oculto dentro de la misma ventana. Así se evita
+  // el bug de Chrome/Edge con ventanas emergentes: al cerrar la vista previa
+  // con la "X" el cursor quedaba congelado hasta minimizar y restaurar.
+  const prev = document.getElementById("printFrame");
+  if (prev) prev.remove();
 
-  // Al terminar de imprimir se cierra la ventana emergente y se devuelve el
-  // foco a la app. Sin esto, Chrome/Edge pueden dejar el cursor "congelado"
-  // en la ventana principal hasta minimizarla y restaurarla.
-  let finished = false;
-  let afterPrintFired = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    try { w.close(); } catch (e) { /* la ventana ya pudo cerrarse */ }
+  const iframe = document.createElement("iframe");
+  iframe.id = "printFrame";
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.position = "fixed";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "1024px";
+  iframe.style.height = "768px";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) +
+    '</title><style>' + REPORT_PRINT_CSS + '</style></head><body>' + bodyHtml + '</body></html>');
+  doc.close();
+
+  const cleanup = () => {
+    // Se quita el iframe después de que el diálogo de impresión se cierra y se
+    // devuelve el foco a la aplicación principal.
+    setTimeout(() => {
+      try { iframe.remove(); } catch (e) { /* ya eliminado */ }
+    }, 600);
     try { window.focus(); } catch (e) { /* sin foco programático */ }
   };
 
-  try {
-    w.onafterprint = () => { afterPrintFired = true; finish(); };
-  } catch (e) { /* navegador sin onafterprint */ }
+  // Si el navegador dispara afterprint (al imprimir, cancelar o cerrar con la
+  // "X"), se limpia el iframe y se recupera el foco de inmediato.
+  try { iframe.contentWindow.onafterprint = cleanup; } catch (e) { /* sin soporte */ }
 
+  // Espera a que el navegador maquete el contenido antes de imprimir.
   setTimeout(() => {
     try {
-      w.focus();
-      w.print();
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
     } catch (e) {
-      finish();
+      cleanup();
       return;
     }
-    // print() suele ser bloqueante: al volver, el diálogo ya se cerró. Si el
-    // navegador no disparó onafterprint, cerramos igual para liberar el cursor.
-    setTimeout(() => { if (!afterPrintFired) finish(); }, 700);
-  }, 400);
+    cleanup();
+  }, 350);
 }
 
 function exportSheetsToExcel(sheets, fileName, headerLines) {
@@ -5159,7 +5228,10 @@ function renderAssignments(c) {
   c.innerHTML =
     '<div class="page-head">' +
       '<div><h1>Asignaciones Docentes</h1><p>Vincular a cada profesor con sus grados y secciones</p></div>' +
-      '<div class="head-actions"><button class="btn primary" id="aSave" type="button">💾 Guardar Asignaciones</button></div>' +
+      '<div class="head-actions">' +
+        '<button class="btn ghost sm" id="asgPrint" type="button">🖨️ Imprimir / PDF</button>' +
+        '<button class="btn primary" id="aSave" type="button">💾 Guardar Asignaciones</button>' +
+      '</div>' +
     '</div>' +
     '<div class="controls">' +
       '<label class="ctl grow"><span>Docente</span><select class="in" id="aUser">' + optionsHtml("users", cur, "— Seleccionar Docente —") + '</select></label>' +
@@ -5181,6 +5253,7 @@ function renderAssignments(c) {
 
   $("#aUser").addEventListener("change", e => { state.assign.userId = e.target.value; state.assign.rows = undefined; renderView(); });
   $("#aAdd").addEventListener("click", () => { rows.push({ gradoId: "", seccionId: "" }); renderView(); });
+  $("#asgPrint").addEventListener("click", printAssignmentsReport);
   $("#aSave").addEventListener("click", async () => {
     if (!state.assign.userId) { toast("Selecciona un docente primero", "err"); return; }
     const payload = rows.filter(r => r.gradoId || r.seccionId);
@@ -5227,6 +5300,24 @@ function assignmentsTable() {
       const s = (DB.secciones || []).find(x => String(x.id) === String(a.seccionId));
       return '<tr><td><b>' + esc(userLabel(a.userId)) + '</b></td><td>' + esc(g ? labelOf(g) : a.gradoId) + '</td><td>' + esc(s ? labelOf(s) : a.seccionId) + '</td></tr>';
     }).join("") + '</tbody></table>';
+}
+
+// Reporte imprimible de las asignaciones docentes del ciclo activo.
+function printAssignmentsReport() {
+  const list = cycleScoped(DB.teacher_assignments || []);
+  const body = '<div class="boleta">' +
+    '<div class="rep-head">' +
+      '<div><h1>Asignaciones Docentes</h1><div class="b-sub">Grados y secciones por docente</div></div>' +
+      '<div class="meta">Ciclo: ' + esc(cyclePrintLabel()) +
+        '<br>Generado: ' + esc(today()) + '</div>' +
+    '</div>' +
+    (list.length
+      ? assignmentsTable()
+      : '<div class="empty">No hay asignaciones registradas en el ciclo escolar en uso.</div>') +
+    '<div class="b-legend">Total de asignaciones: ' + list.length + '</div>' +
+  '</div>';
+
+  printDoc("Asignaciones Docentes", body);
 }
 
 function openConnModal() {
