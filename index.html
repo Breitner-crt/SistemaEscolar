@@ -1215,6 +1215,7 @@ function pretty(k) {
   if (/^end$/i.test(s.trim())) return "Fin";
   if (/^active$/i.test(s.trim())) return "Activo";
   if (/^descripcion$/i.test(s.trim())) return "Descripción";
+  if (/^descriptions?$/i.test(s.trim())) return "Descripción";
   if (/^points?$/i.test(s.trim()) || /^puntos?$/i.test(s.trim())) return "Puntaje";
   if (/^puntaje\s*max(imo)?$/i.test(s.trim())) return "Puntaje máximo";
   if (/^due\s*date$/i.test(s.trim())) return "Fecha de entrega";
@@ -1244,7 +1245,10 @@ function fmtDate(v) {
 function normKey(s) {
   var t = String(s === undefined || s === null ? "" : s);
   try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) { /* sin normalize */ }
-  return t.toLowerCase().replace(/[\s_\-]+/g, "");
+  var n = t.toLowerCase().replace(/[\s_\-]+/g, "");
+  // "description" y "descripcion" se consideran el mismo campo.
+  if (n.indexOf("description") === 0) n = "descripcion" + n.slice("description".length);
+  return n;
 }
 
 function ciGet(o, names) {
@@ -3004,25 +3008,36 @@ function setupActivityCascade(ov) {
 
 function openRecordModal(key, record, after) {
   let headers = unionKeys(DB[key], FALLBACK_HEADERS[key]);
+  let actDescKey = "";
   // El campo Descripción es importante en Actividades. Si la hoja todavía no
   // devuelve la columna (por cache o por un encabezado nuevo), se agrega igual
   // al formulario para que siempre se pueda capturar.
   if (key === "activities") {
-    // Elimina columnas duplicadas que se normalizan igual (por ejemplo
-    // "Descripción" y "Descripcion" creadas por error en la hoja).
+    // Descripción puede venir como "Descripción", "Descripcion", "description"
+    // o "Description". Todas se consideran el mismo campo.
+    const isDesc = h => {
+      const n = normKey(h);
+      return n.indexOf("descripcion") === 0 || n.indexOf("description") === 0;
+    };
+
+    // Elimina columnas duplicadas que representan el mismo campo.
     const seen = {};
     const unique = [];
     headers.forEach(h => {
-      const n = normKey(h);
+      const n = isDesc(h) ? "descripcion" : normKey(h);
       if (!seen[n]) { seen[n] = true; unique.push(h); }
     });
     headers = unique;
 
-    // Deja una sola Descripción y la coloca después de Nombre y Puntaje.
-    const descIdx = headers.findIndex(h => normKey(h) === "descripcion");
-    const descKey = descIdx >= 0 ? headers[descIdx] : "descripcion";
-    if (descIdx >= 0) headers.splice(descIdx, 1);
+    // Se queda con la variante en español (la columna C que creaste).
+    const descHeaders = headers.filter(isDesc);
+    actDescKey = descHeaders.find(h => normKey(h) === "descripcion") ||
+      descHeaders.find(h => normKey(h) === "description") ||
+      descHeaders[0] ||
+      "descripcion";
+    headers = headers.filter(h => !isDesc(h));
 
+    // La coloca después de Nombre y Puntaje.
     const isScore = h => {
       const n = normKey(h);
       return /^(points?|puntos?|max|maximo)$/.test(n) || n.indexOf("puntaje") === 0;
@@ -3030,11 +3045,23 @@ function openRecordModal(key, record, after) {
     const scoreIdx = headers.findIndex(isScore);
     const nameIdx = headers.findIndex(h => normKey(h) === "nombre");
     const insertAt = scoreIdx >= 0 ? scoreIdx + 1 : (nameIdx >= 0 ? nameIdx + 1 : 1);
-    headers.splice(insertAt, 0, descKey);
+    headers.splice(insertAt, 0, actDescKey);
   }
   const isNew = !record || !record.id;
   const def = isNew ? newRecordDefaults(key) : {};
   const rec = Object.assign({}, def, record || {});
+  // Si el texto está en otra variante (por ejemplo "Description"), se copia al
+  // campo visible para no perder la descripción al editar.
+  if (key === "activities" && actDescKey) {
+    const descVals = Object.keys(rec).filter(k => {
+      const n = normKey(k);
+      return n.indexOf("descripcion") === 0 || n.indexOf("description") === 0;
+    });
+    const firstVal = descVals.find(k => rec[k] !== undefined && String(rec[k]).trim() !== "");
+    if (firstVal && (rec[actDescKey] === undefined || String(rec[actDescKey]).trim() === "")) {
+      rec[actDescKey] = rec[firstVal];
+    }
+  }
   let body = '<form id="recForm"><div class="form-grid">' +
     headers.map(h => fieldHtml(h, rec[h] !== undefined ? rec[h] : ciGet(rec, [h]), key)).join("") +
     '</div></form>';

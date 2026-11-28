@@ -798,7 +798,10 @@ function defaultCycleSheetId() {
 function normHeader(s) {
   var t = String(s === undefined || s === null ? "" : s);
   try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) { /* sin normalize */ }
-  return t.toLowerCase().replace(/[\s_\-]+/g, "");
+  var n = t.toLowerCase().replace(/[\s_\-]+/g, "");
+  // "description" y "descripcion" se consideran el mismo campo.
+  if (n.indexOf("description") === 0) n = "descripcion" + n.slice("description".length);
+  return n;
 }
 
 function saveRow(sheetName, payload, idKey) {
