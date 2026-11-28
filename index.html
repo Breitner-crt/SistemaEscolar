@@ -3228,14 +3228,7 @@ if (key === "activities") {
 }
 
 async function deleteRecord(key, rec, after) {
-  let label = "";
-  if (key === "cycles") label = rec.label || rec.id;
-  else if (key === "students") label = rec.nombre || rec.id;
-  else if (key === "activities") label = rec.nombre || rec.id;
-  else if (key === "grades") label = rec.nota !== undefined ? "Nota" : "";
-  else if (key === "exams") label = "Examen";
-  else if (key === "attendance") label = "Asistencia";
-  const msg = label ? `¿Eliminar ${label}?` : "¿Estás seguro de que deseas eliminar este registro permanently?";
+  const msg = "Estás seguro de que deseas eliminar este registro?";
   const ok = await confirmCustom(msg);
   if (!ok) return;
   try {
