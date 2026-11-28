@@ -793,6 +793,14 @@ function defaultCycleSheetId() {
   return String(rows[0].id === undefined || rows[0].id === null ? "" : rows[0].id);
 }
 
+// Normaliza encabezados para comparar sin importar mayúsculas, acentos,
+// espacios ni guiones: "Descripción", "Descripcion" y "descripcion" son iguales.
+function normHeader(s) {
+  var t = String(s === undefined || s === null ? "" : s);
+  try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) { /* sin normalize */ }
+  return t.toLowerCase().replace(/[\s_\-]+/g, "");
+}
+
 function saveRow(sheetName, payload, idKey) {
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return jsonResponse({ success: false, message: "Hoja no encontrada: " + sheetName });
@@ -832,8 +840,17 @@ function saveRow(sheetName, payload, idKey) {
     }
   }
 
+  const payloadByNorm = {};
+  Object.keys(payload || {}).forEach(function (k) {
+    const n = normHeader(k);
+    if (payloadByNorm[n] === undefined) payloadByNorm[n] = payload[k];
+  });
   const rowValues = headers.map(function (h) {
     var val = payload[h];
+    if (val === undefined) {
+      const n = normHeader(h);
+      if (payloadByNorm[n] !== undefined) val = payloadByNorm[n];
+    }
     if (val instanceof Date) {
       val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
     } else if (typeof val === "object" && val !== null) {

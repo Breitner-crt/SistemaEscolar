@@ -1238,12 +1238,18 @@ function fmtDate(v) {
   return m[3] + "/" + m[2] + "/" + m[1];
 }
 
+function normKey(s) {
+  var t = String(s === undefined || s === null ? "" : s);
+  try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) { /* sin normalize */ }
+  return t.toLowerCase().replace(/[\s_\-]+/g, "");
+}
+
 function ciGet(o, names) {
   if (!o) return undefined;
   const map = {};
-  Object.keys(o).forEach(k => { map[String(k).toLowerCase()] = k; });
+  Object.keys(o).forEach(k => { map[normKey(k)] = k; });
   for (let i = 0; i < names.length; i++) {
-    const k = map[String(names[i]).toLowerCase()];
+    const k = map[normKey(names[i])];
     if (k !== undefined && o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== "") return o[k];
   }
   return undefined;
@@ -2425,7 +2431,7 @@ function paintActivities(editable) {
   if (q) {
     list = list.filter(r => {
       const nombre = String(r.nombre || r.name || r.titulo || "").toLowerCase();
-      const desc = String(r.descripcion || r.description || "").toLowerCase();
+      const desc = String(ciGet(r, ["descripcion", "description"]) || "").toLowerCase();
       const gLabel = String(relLabel("grado", relGet(r, "grado")) || "").toLowerCase();
       const mLabel = String(relLabel("materia", relGet(r, "materia")) || "").toLowerCase();
       const bLabel = String(relLabel("bimestre", relGet(r, "bimestre")) || "").toLowerCase();
@@ -2596,7 +2602,7 @@ function paintActivities(editable) {
 function activityRowHtml(a, editable, idx) {
   const id = String(a.id);
   const nombre = esc(a.nombre || a.name || a.titulo || "Actividad");
-  const desc = esc(a.descripcion || a.description || "");
+  const desc = esc(ciGet(a, ["descripcion", "description"]) || "");
   const bLabel = relLabel("bimestre", relGet(a, "bimestre"));
   const fecha = datePart(ciGet(a, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"]));
   const late = activityOutOfRange(a);
@@ -2632,7 +2638,7 @@ function activitiesReportList() {
   if (q) {
     list = list.filter(r => {
       const nombre = String(r.nombre || r.name || r.titulo || "").toLowerCase();
-      const desc = String(r.descripcion || r.description || "").toLowerCase();
+      const desc = String(ciGet(r, ["descripcion", "description"]) || "").toLowerCase();
       const gLabel = String(relLabel("grado", relGet(r, "grado")) || "").toLowerCase();
       const mLabel = String(relLabel("materia", relGet(r, "materia")) || "").toLowerCase();
       const bLabel = String(relLabel("bimestre", relGet(r, "bimestre")) || "").toLowerCase();
@@ -2655,7 +2661,7 @@ function activitiesReportRows(list) {
     const pts = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
     return [
       a.nombre || a.name || a.titulo || "",
-      a.descripcion || a.description || "",
+      ciGet(a, ["descripcion", "description"]) || "",
       relLabel("grado", relGet(a, "grado")) || "",
       relLabel("materia", relGet(a, "materia")) || "",
       relLabel("bimestre", relGet(a, "bimestre")) || "",
@@ -2774,7 +2780,7 @@ function paintCrud(cfg, canDel) {
 function fieldHtml(h, val, key) {
   const v = val === undefined || val === null ? "" : val;
   const name = esc(h);
-  const kl = h.toLowerCase();
+  const kl = normKey(h);
   const relMode = /id$/i.test(kl) ? "id" : "label";
   let inner;
   if (kl === "id") {
@@ -2846,7 +2852,7 @@ function fieldHtml(h, val, key) {
   } else {
     inner = '<input class="in" name="' + name + '" value="' + esc(v) + '">';
   }
-  const full = /observ|descripcion|detalle|direccion|comentario/i.test(h) ? " full" : "";
+  const full = /observ|descripcion|detalle|direccion|comentario/i.test(kl) ? " full" : "";
   return '<label class="fld' + full + '"><span>' + esc(pretty(h)) + '</span>' + inner + '</label>';
 }
 
@@ -2994,12 +3000,20 @@ function setupActivityCascade(ov) {
 }
 
 function openRecordModal(key, record, after) {
-  const headers = unionKeys(DB[key], FALLBACK_HEADERS[key]);
+  let headers = unionKeys(DB[key], FALLBACK_HEADERS[key]);
+  // El campo Descripción es importante en Actividades. Si la hoja todavía no
+  // devuelve la columna (por cache o por un encabezado nuevo), se agrega igual
+  // al formulario para que siempre se pueda capturar.
+  if (key === "activities" && !headers.some(h => normKey(h) === "descripcion")) {
+    const pos = headers.findIndex(h => normKey(h) === "nombre");
+    headers = headers.slice();
+    headers.splice(pos >= 0 ? pos + 1 : 1, 0, "descripcion");
+  }
   const isNew = !record || !record.id;
   const def = isNew ? newRecordDefaults(key) : {};
   const rec = Object.assign({}, def, record || {});
   let body = '<form id="recForm"><div class="form-grid">' +
-    headers.map(h => fieldHtml(h, rec[h], key)).join("") +
+    headers.map(h => fieldHtml(h, rec[h] !== undefined ? rec[h] : ciGet(rec, [h]), key)).join("") +
     '</div></form>';
   if (isNew) body = body.replace('<form id="recForm">', '<form id="recForm"><input type="hidden" name="id" value="' + uid() + '">');
   const foot = '<button class="btn ghost" type="button" data-cancel>Cancelar</button> <button class="btn primary" type="button" data-save>Guardar</button>';
