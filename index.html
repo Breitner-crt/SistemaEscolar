@@ -1251,6 +1251,46 @@ function normKey(s) {
   return n;
 }
 
+// Distancia de Levenshtein: sirve para tolerar errores de escritura en los
+// encabezados de la hoja (por ejemplo "Desccripcion", "Descipcion", "Descripsion").
+function editDistance(a, b) {
+  a = String(a || ""); b = String(b || "");
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = new Array(n + 1);
+  let cur = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    const tmp = prev; prev = cur; cur = tmp;
+  }
+  return prev[n];
+}
+
+// Detecta columnas de descripción aunque el encabezado tenga errores de
+// escritura ("Desccripcion") o esté en inglés ("Description").
+function isDescriptionHeader(h) {
+  const n = normKey(h);
+  if (!n) return false;
+  if (n.indexOf("descripcion") === 0 || n.indexOf("description") === 0) return true;
+  const base = n.replace(/[^a-z]/g, "");
+  if (base.length < 6 || base.charAt(0) !== "d") return false;
+  return editDistance(base.slice(0, 14), "descripcion") <= 2;
+}
+
+// Devuelve el valor de la descripción tomando la primera columna que
+// corresponda, sin importar cómo esté escrito el encabezado.
+function recordDescription(r) {
+  if (!r) return "";
+  const k = Object.keys(r).find(isDescriptionHeader);
+  return k && r[k] !== undefined && r[k] !== null ? r[k] : "";
+}
+
 function ciGet(o, names) {
   if (!o) return undefined;
   const map = {};
@@ -2789,6 +2829,7 @@ function fieldHtml(h, val, key) {
   const name = esc(h);
   const kl = normKey(h);
   const relMode = /id$/i.test(kl) ? "id" : "label";
+  const isDescField = /observ|descripcion|detalle|direccion|comentario/i.test(kl) || isDescriptionHeader(h);
   let inner;
   if (kl === "id") {
     return '<input type="hidden" name="id" value="' + esc(v) + '">';
@@ -2854,13 +2895,14 @@ function fieldHtml(h, val, key) {
       '</div>';
   } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|points?|telefono|fono|codigo|puntajemax/i.test(kl)) {
     inner = '<input class="in" type="number" step="any" name="' + name + '" value="' + esc(v) + '">';
-  } else if (/observ|descripcion|detalle|direccion|comentario/i.test(kl)) {
+  } else if (isDescField) {
     inner = '<textarea class="in" name="' + name + '" rows="4">' + esc(v) + '</textarea>';
   } else {
     inner = '<input class="in" name="' + name + '" value="' + esc(v) + '">';
   }
-  const full = /observ|descripcion|detalle|direccion|comentario/i.test(kl) ? " full" : "";
-  return '<label class="fld' + full + '"><span>' + esc(pretty(h)) + '</span>' + inner + '</label>';
+  const full = isDescField ? " full" : "";
+  const label = isDescriptionHeader(h) ? "Descripción" : pretty(h);
+  return '<label class="fld' + full + '"><span>' + esc(label) + '</span>' + inner + '</label>';
 }
 
 function openModal(title, bodyHtml, footHtml, setup) {
@@ -3013,12 +3055,9 @@ function openRecordModal(key, record, after) {
   // devuelve la columna (por cache o por un encabezado nuevo), se agrega igual
   // al formulario para que siempre se pueda capturar.
   if (key === "activities") {
-    // Descripción puede venir como "Descripción", "Descripcion", "description"
-    // o "Description". Todas se consideran el mismo campo.
-    const isDesc = h => {
-      const n = normKey(h);
-      return n.indexOf("descripcion") === 0 || n.indexOf("description") === 0;
-    };
+    // Descripción puede venir como "Descripción", "Descripcion", "description",
+    // "Description" o incluso con un error de escritura como "Desccripcion".
+    const isDesc = isDescriptionHeader;
 
     // Elimina columnas duplicadas que representan el mismo campo.
     const seen = {};
@@ -3047,16 +3086,22 @@ function openRecordModal(key, record, after) {
     const insertAt = scoreIdx >= 0 ? scoreIdx + 1 : (nameIdx >= 0 ? nameIdx + 1 : 1);
     headers.splice(insertAt, 0, actDescKey);
   }
+  // Red de seguridad: si por cualquier motivo llegaran dos columnas que se
+  // muestran como "Descripción", deja una sola.
+  const seenDescLabel = {};
+  headers = headers.filter(h => {
+    if (!isDescriptionHeader(h)) return true;
+    if (seenDescLabel.desc) return false;
+    seenDescLabel.desc = true;
+    return true;
+  });
   const isNew = !record || !record.id;
   const def = isNew ? newRecordDefaults(key) : {};
   const rec = Object.assign({}, def, record || {});
   // Si el texto está en otra variante (por ejemplo "Description"), se copia al
   // campo visible para no perder la descripción al editar.
   if (key === "activities" && actDescKey) {
-    const descVals = Object.keys(rec).filter(k => {
-      const n = normKey(k);
-      return n.indexOf("descripcion") === 0 || n.indexOf("description") === 0;
-    });
+    const descVals = Object.keys(rec).filter(isDescriptionHeader);
     const firstVal = descVals.find(k => rec[k] !== undefined && String(rec[k]).trim() !== "");
     if (firstVal && (rec[actDescKey] === undefined || String(rec[actDescKey]).trim() === "")) {
       rec[actDescKey] = rec[firstVal];
