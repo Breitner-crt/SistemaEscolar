@@ -2706,6 +2706,10 @@ function activitiesReportList() {
 function activitiesReportRows(list) {
   return list.map(a => {
     const pts = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
+    // Dos fechas: asignación y entrega. Pri Ord1: assignDate/assign date/dueDate/due date/fechaActividad/fecha/date.
+    const d1 = ciGet(a, ["assignDate", "assign date", "dueDate", "due date", "fechaActividad", "fecha", "date"]);
+    // Pri Ord2: fechaEntrega / entregaDate / fechaEntrega / fechaEntrega / entrega.
+    const d2 = ciGet(a, ["entregaDate", "fechaEntrega", "entrega", "fecha de entrega", "deliveryDate", "delivery date"]);
     return [
       a.nombre || a.name || a.titulo || "",
       ciGet(a, ["descripcion", "description"]) || "",
@@ -2713,7 +2717,8 @@ function activitiesReportRows(list) {
       relLabel("materia", relGet(a, "materia")) || "",
       relLabel("bimestre", relGet(a, "bimestre")) || "",
       cycleName(cycleOf(a)) || "",
-      datePart(ciGet(a, ["due date", "dueDate", "fecha", "date", "fechaActividad", "assign date", "assignDate"])),
+      datePart(d1) || "",
+      datePart(d2) || "",
       pts === undefined || pts === null ? "" : pts
     ];
   });
@@ -2721,7 +2726,7 @@ function activitiesReportRows(list) {
 
 function buildActivitiesFlatTable() {
   const list = activitiesReportList();
-  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha", "Puntaje Máx."];
+  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha Asignación", "Fecha Entrega", "Puntaje Máx."];
   const rows = activitiesReportRows(list);
   const t = $("#actFlatExport");
   t.innerHTML =
@@ -2733,7 +2738,7 @@ function buildActivitiesFlatTable() {
 // docente y la búsqueda actual.
 function printActivitiesReport() {
   const list = activitiesReportList();
-  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha", "Puntaje"];
+  const headers = ["Actividad", "Descripción", "Grado", "Materia", "Bimestre", "Ciclo", "Fecha Asignación", "Fecha Entrega", "Puntaje"];
   const rows = activitiesReportRows(list);
 
   const tableHtml = list.length
