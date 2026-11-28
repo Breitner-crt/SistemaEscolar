@@ -1214,6 +1214,9 @@ function pretty(k) {
   if (/^start$/i.test(s.trim())) return "Inicio";
   if (/^end$/i.test(s.trim())) return "Fin";
   if (/^active$/i.test(s.trim())) return "Activo";
+  if (/^descripcion$/i.test(s.trim())) return "Descripción";
+  if (/^points?$/i.test(s.trim()) || /^puntos?$/i.test(s.trim())) return "Puntaje";
+  if (/^puntaje\s*max(imo)?$/i.test(s.trim())) return "Puntaje máximo";
   if (/^due\s*date$/i.test(s.trim())) return "Fecha de entrega";
   if (/^assign\s*date$/i.test(s.trim())) return "Fecha de asignación";
   if (/^(childrenids|hijos|children|estudiantesids)$/i.test(s.replace(/\s+/g, ""))) return "Hijos";
@@ -2845,10 +2848,10 @@ function fieldHtml(h, val, key) {
       '<button type="button" class="date-btn" tabindex="-1" aria-label="Elegir fecha">📅</button>' +
       '<input type="date" class="date-native" tabindex="-1" aria-hidden="true" value="' + esc(iso) + '">' +
       '</div>';
-  } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|points|telefono|fono|codigo|puntajemax/i.test(kl)) {
+  } else if (/nota|puntaje|score|valor|calific|promedio|edad|dni|puntos|points?|telefono|fono|codigo|puntajemax/i.test(kl)) {
     inner = '<input class="in" type="number" step="any" name="' + name + '" value="' + esc(v) + '">';
   } else if (/observ|descripcion|detalle|direccion|comentario/i.test(kl)) {
-    inner = '<textarea class="in" name="' + name + '" rows="3">' + esc(v) + '</textarea>';
+    inner = '<textarea class="in" name="' + name + '" rows="4">' + esc(v) + '</textarea>';
   } else {
     inner = '<input class="in" name="' + name + '" value="' + esc(v) + '">';
   }
@@ -3004,10 +3007,30 @@ function openRecordModal(key, record, after) {
   // El campo Descripción es importante en Actividades. Si la hoja todavía no
   // devuelve la columna (por cache o por un encabezado nuevo), se agrega igual
   // al formulario para que siempre se pueda capturar.
-  if (key === "activities" && !headers.some(h => normKey(h) === "descripcion")) {
-    const pos = headers.findIndex(h => normKey(h) === "nombre");
-    headers = headers.slice();
-    headers.splice(pos >= 0 ? pos + 1 : 1, 0, "descripcion");
+  if (key === "activities") {
+    // Elimina columnas duplicadas que se normalizan igual (por ejemplo
+    // "Descripción" y "Descripcion" creadas por error en la hoja).
+    const seen = {};
+    const unique = [];
+    headers.forEach(h => {
+      const n = normKey(h);
+      if (!seen[n]) { seen[n] = true; unique.push(h); }
+    });
+    headers = unique;
+
+    // Deja una sola Descripción y la coloca después de Nombre y Puntaje.
+    const descIdx = headers.findIndex(h => normKey(h) === "descripcion");
+    const descKey = descIdx >= 0 ? headers[descIdx] : "descripcion";
+    if (descIdx >= 0) headers.splice(descIdx, 1);
+
+    const isScore = h => {
+      const n = normKey(h);
+      return /^(points?|puntos?|max|maximo)$/.test(n) || n.indexOf("puntaje") === 0;
+    };
+    const scoreIdx = headers.findIndex(isScore);
+    const nameIdx = headers.findIndex(h => normKey(h) === "nombre");
+    const insertAt = scoreIdx >= 0 ? scoreIdx + 1 : (nameIdx >= 0 ? nameIdx + 1 : 1);
+    headers.splice(insertAt, 0, descKey);
   }
   const isNew = !record || !record.id;
   const def = isNew ? newRecordDefaults(key) : {};
