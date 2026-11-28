@@ -2706,10 +2706,21 @@ function activitiesReportList() {
 function activitiesReportRows(list) {
   return list.map(a => {
     const pts = ciGet(a, ["points", "puntajeMax", "puntaje", "puntos", "max", "puntaje_maximo", "valorMax"]);
-    // Dos fechas: asignación y entrega. Pri Ord1: assignDate/assign date/dueDate/due date/fechaActividad/fecha/date.
-    const d1 = ciGet(a, ["assignDate", "assign date", "dueDate", "due date", "fechaActividad", "fecha", "date"]);
-    // Pri Ord2: fechaEntrega / entregaDate / fechaEntrega / fechaEntrega / entrega.
-    const d2 = ciGet(a, ["entregaDate", "fechaEntrega", "entrega", "fecha de entrega", "deliveryDate", "delivery date"]);
+    // FECHA 1: Asignación / Due date - probamos muchos nombres posibles
+    const d1 = ciGet(a, [
+      "assignDate", "assign date", "dueDate", "due date", "fechaActividad", "fechaActividadInicio",
+      "fecha de asignación", "fecha_asignacion", "fechaAsignacion",
+      "fecha", "date", "due", "fechaLimite", "fecha_limite",
+      "assignDate", "assign_date", "due_date", "fecha_de_asignacion"
+    ]);
+    // FECHA 2: Entrega / fechaEntrega - probamos muchos nombres posibles
+    const d2 = ciGet(a, [
+      "entregaDate", "fechaEntrega", "fecha de entrega", "fecha_entrega", "fechaEntrega",
+      "deliveryDate", "delivery date", "delivery_date", "delivery_date",
+      "entrega", "fechaEntrega", "entrega_real", "entregaReal",
+      "returnDate", "return_date", "fechaDevolucion", "fechaDevolucion",
+      "fecha_de_entrega"
+    ]);
     return [
       a.nombre || a.name || a.titulo || "",
       ciGet(a, ["descripcion", "description"]) || "",
